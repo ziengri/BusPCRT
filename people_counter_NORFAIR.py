@@ -1,8 +1,8 @@
-import argparse
+﻿import argparse
 import json
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import cv2
 import numpy as np
@@ -146,7 +146,7 @@ class FileVideoSource(VideoSource):
     def __init__(self, path: str):
         self.cap = cv2.VideoCapture(path)
         if not self.cap.isOpened():
-            raise RuntimeError(f"Не удалось открыть видео: {path}")
+            raise RuntimeError(f"Failed to open video: {path}")
 
     def read(self) -> Optional[np.ndarray]:
         ok, frame = self.cap.read()
@@ -241,7 +241,7 @@ class OpenVINODetector:
     ) -> Tuple[List[Tuple[int, int, int, int]], List[float], float]:
         t0 = time.perf_counter()
 
-        outputs = np.squeeze(results)  # ожидаем (300, 6)
+        outputs = np.squeeze(results)  # expected (300, 6)
 
         if outputs.ndim != 2 or outputs.shape[1] != 6:
             raise ValueError(f"Unexpected output shape: {results.shape}")
@@ -252,7 +252,7 @@ class OpenVINODetector:
         rects: List[Tuple[int, int, int, int]] = []
         scores: List[float] = []
 
-        # Формат: [x1, y1, x2, y2, score, class_id]
+        # Format: [x1, y1, x2, y2, score, class_id]
         conf = outputs[:, 4]
         mask = conf > conf_th
 
@@ -264,21 +264,30 @@ class OpenVINODetector:
                 idx = np.argpartition(cand_conf, -nms_topk)[-nms_topk:]
                 cand = cand[idx]
 
-            x1 = (cand[:, 0] * sx).astype(np.int32)
-            y1 = (cand[:, 1] * sy).astype(np.int32)
-            x2 = (cand[:, 2] * sx).astype(np.int32)
-            y2 = (cand[:, 3] * sy).astype(np.int32)
-            confs = cand[:, 4].astype(float)
+            x1 = np.clip((cand[:, 0] * sx).astype(np.int32), 0, W - 1)
+            y1 = np.clip((cand[:, 1] * sy).astype(np.int32), 0, H - 1)
+            x2 = np.clip((cand[:, 2] * sx).astype(np.int32), 0, W - 1)
+            y2 = np.clip((cand[:, 3] * sy).astype(np.int32), 0, H - 1)
+            confs = cand[:, 4].astype(np.float32)
 
-            for i in range(len(cand)):
-                xx1 = max(0, min(W - 1, int(x1[i])))
-                yy1 = max(0, min(H - 1, int(y1[i])))
-                xx2 = max(0, min(W - 1, int(x2[i])))
-                yy2 = max(0, min(H - 1, int(y2[i])))
+            valid = (x2 > x1) & (y2 > y1)
+            if np.any(valid):
+                x1 = x1[valid]
+                y1 = y1[valid]
+                x2 = x2[valid]
+                y2 = y2[valid]
+                confs = confs[valid]
 
-                if xx2 > xx1 and yy2 > yy1:
-                    rects.append((xx1, yy1, xx2, yy2))
-                    scores.append(float(confs[i]))
+                boxes_xywh = np.stack([x1, y1, x2 - x1, y2 - y1], axis=1).tolist()
+                conf_list = confs.astype(float).tolist()
+                kept = cv2.dnn.NMSBoxes(boxes_xywh, conf_list, conf_th, nms_iou)
+
+                if len(kept) > 0:
+                    kept_idx = np.array(kept).reshape(-1)
+                    for i in kept_idx:
+                        ii = int(i)
+                        rects.append((int(x1[ii]), int(y1[ii]), int(x2[ii]), int(y2[ii])))
+                        scores.append(float(conf_list[ii]))
 
         t1 = time.perf_counter()
         return rects, scores, (t1 - t0) * 1000.0
@@ -289,14 +298,20 @@ class OpenVINODetector:
 class TrackableObject:
     objectID: int
     centroid: Tuple[int, int]
-    counted: bool = False
+    balance: int = 0
+    missing_frames: int = 0
 
     def __post_init__(self):
         self.centroids: List[Tuple[int, int]] = [self.centroid]
 
 
 class PeopleCounter:
-    def __init__(self):
+    def __init__(
+        self,
+        max_centroid_history: int = 2,
+        max_missing_frames: int = 60,
+        line_margin_px: int = 1,
+    ):
         self.trackableObjects: Dict[int, TrackableObject] = {}
         self.totalDown = 0
         self.totalUp = 0
@@ -305,7 +320,7 @@ class PeopleCounter:
         self,
         id_centroids: List[Tuple[int, Tuple[int, int]]],
         H: int,
-        is_det: bool,                 # <-- добавили
+        is_det: bool,
         debug: int = 0,
         frame: Optional[np.ndarray] = None,
     ) -> float:
@@ -369,15 +384,16 @@ def tracked_to_id_centroids(tracked_objects) -> List[Tuple[int, Tuple[int, int]]
 # -----------------------------
 def main():
     args = parse_args()
-    config = load_config()
+    # config = load_config()
 
-    print("[INFO] Загрузка модели OpenVINO...")
+    print("[INFO] Loading OpenVINO model...")
     detector = OpenVINODetector(args.model, device="CPU")
 
     # Source
     if args.input:
         source: VideoSource = FileVideoSource(args.input)
     else:
+        pass
         source = StreamVideoSource(config["url"])
 
     resizer = FrameResizer(target_w=256)
@@ -392,7 +408,6 @@ def main():
     W = H = None
 
     norfair_tracker: Optional[Tracker] = None
-    frames_since_det = 0
     try:
         while True:
             # time.sleep(0.1)
@@ -441,14 +456,10 @@ def main():
                 detections = rects_to_norfair_detections(rects, scores)
                 t0 = time.perf_counter()
                 tracked_objects = norfair_tracker.update(detections=detections, period=args.skip_frames)
-                frames_since_det = 0
                 t1 = time.perf_counter()
-                # print("DET frame", totalFrames, "period", max(1, frames_since_det), "DETS", len(rects), "TRK", len(tracked_objects))
             else:
-                detections = []
                 t0 = time.perf_counter()
                 tracked_objects = norfair_tracker.update()
-                frames_since_det += 1
                 t1 = time.perf_counter()
 
             # ---- TRACK ----
@@ -522,9 +533,9 @@ def main():
         if args.debug:
             cv2.destroyAllWindows()
 
-        print(f"[INFO] Итого IN: {counter.totalDown}")
-        print(f"[INFO] Итого OUT: {counter.totalUp}")
-        print(f"[INFO] Средний FPS: {fps.fps():.2f}")
+        print(f"[INFO] Total IN: {counter.totalDown}")
+        print(f"[INFO] Total OUT: {counter.totalUp}")
+        print(f"[INFO] Average FPS: {fps.fps():.2f}")
 
         if args.bench:
             print(bench.report_all(prefix="[BENCH FINAL ALL]"))
@@ -534,3 +545,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
