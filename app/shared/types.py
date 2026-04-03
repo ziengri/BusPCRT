@@ -1,0 +1,20 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass(slots=True)
+class CountResult:
+    total_in: int
+    total_out: int
+    processed_frames: int = 0
+
+
+@dataclass(slots=True)
+class ProcessedResult:
+    date: str
+    id: str
+    total_in: int
+    total_out: int
+    meta_path: Path

@@ -1,0 +1,10 @@
+{
+  "source": "4.mp4",
+  "camera_id": "cam1",
+  "sessions_dir": "sessions",
+  "width": 256,
+  "height": 256,
+  "fps": 25,
+  "segment_seconds": 30,
+  "idle_sleep": 0.05
+}

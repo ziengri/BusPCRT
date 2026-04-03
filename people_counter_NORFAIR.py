@@ -2,7 +2,7 @@
 import json
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -84,6 +84,7 @@ class AppArgs:
     bench_warmup: int
     bench_every: int
     nms_topk: int
+    line_y_ratio: float
 
     # Norfair params
     distance_threshold: float
@@ -103,6 +104,7 @@ def parse_args() -> AppArgs:
     ap.add_argument("--bench-warmup", type=int, default=50, help="warmup frames before printing benchmark")
     ap.add_argument("--bench-every", type=int, default=200, help="print benchmark every N frames after warmup")
     ap.add_argument("--nms-topk", type=int, default=200, help="limit candidates before NMS (0=off)")
+    ap.add_argument("--line-y-ratio", type=float, default=0.3, help="count line Y as ratio of frame height (0.0..1.0)")
 
     # Norfair tuning
     ap.add_argument("--dist-th", type=float, default=0.40, help="Norfair distance_threshold (0..1)")
@@ -110,6 +112,8 @@ def parse_args() -> AppArgs:
     ap.add_argument("--init-delay", type=int, default=1, help="Norfair initialization_delay")
 
     a = ap.parse_args()
+    if not (0.0 <= a.line_y_ratio <= 1.0):
+        ap.error("--line-y-ratio must be in range [0.0, 1.0]")
     return AppArgs(
         model=a.model,
         input=a.input,
@@ -120,6 +124,7 @@ def parse_args() -> AppArgs:
         bench_warmup=a.bench_warmup,
         bench_every=a.bench_every,
         nms_topk=a.nms_topk,
+        line_y_ratio=a.line_y_ratio,
         distance_threshold=a.dist_th,
         hit_counter_max=a.hit_max,
         initialization_delay=a.init_delay,
@@ -298,23 +303,30 @@ class OpenVINODetector:
 class TrackableObject:
     objectID: int
     centroid: Tuple[int, int]
-    balance: int = 0
-    missing_frames: int = 0
-
-    def __post_init__(self):
-        self.centroids: List[Tuple[int, int]] = [self.centroid]
+    last_side: int = 0  # -1: above line, +1: below line, 0: in dead-zone
 
 
 class PeopleCounter:
     def __init__(
         self,
-        max_centroid_history: int = 2,
-        max_missing_frames: int = 60,
-        line_margin_px: int = 1,
+        line_margin_px: int = 10,
+        line_y_ratio: float = 0.5,
     ):
         self.trackableObjects: Dict[int, TrackableObject] = {}
         self.totalDown = 0
         self.totalUp = 0
+        self.line_margin_px = max(0, int(line_margin_px))
+        self.line_y_ratio = min(1.0, max(0.0, float(line_y_ratio)))
+
+    def get_line_y(self, H: int) -> int:
+        return max(0, min(H - 1, int(round((H - 1) * self.line_y_ratio))))
+
+    def _line_side(self, y: int, line_y: int) -> int:
+        if y < line_y - self.line_margin_px:
+            return -1
+        if y > line_y + self.line_margin_px:
+            return 1
+        return 0
 
     def update_from_ids(
         self,
@@ -325,27 +337,32 @@ class PeopleCounter:
         frame: Optional[np.ndarray] = None,
     ) -> float:
         t0 = time.perf_counter()
-        line_y = H // 2
+        line_y = self.get_line_y(H)
 
         for objectID, centroid in id_centroids:
+            cy = int(centroid[1])
             to = self.trackableObjects.get(objectID)
 
             if to is None:
                 to = TrackableObject(objectID, centroid)
+                to.last_side = self._line_side(cy, line_y)
                 self.trackableObjects[objectID] = to
             else:
-                # ВАЖНО: обновляем историю только на детекционных кадрах
+                to.centroid = centroid
+                # обновляем счёт только на детекционных кадрах
                 if is_det:
-                    to.centroids.append(centroid)
+                    curr_side = self._line_side(cy, line_y)
 
-                    if len(to.centroids) >= 2:
-                        prev_y = to.centroids[-2][1]
-                        curr_y = to.centroids[-1][1]
+                    # Внутри "мертвой зоны" вокруг линии ничего не считаем.
+                    if curr_side != 0:
+                        if to.last_side != 0 and curr_side != to.last_side:
+                            if to.last_side < curr_side:
+                                self.totalDown += 1
+                            else:
+                                self.totalUp += 1
 
-                        if prev_y < line_y <= curr_y:
-                            self.totalDown += 1
-                        elif prev_y > line_y >= curr_y:
-                            self.totalUp += 1
+                        # Обновляем сторону только когда объект вне dead-zone.
+                        to.last_side = curr_side
             if debug and frame is not None:
                 cv2.circle(frame, (centroid[0], centroid[1]), 3, (255, 255, 255), -1)
 
@@ -397,7 +414,7 @@ def main():
         source = StreamVideoSource(config["url"])
 
     resizer = FrameResizer(target_w=256)
-    counter = PeopleCounter()
+    counter = PeopleCounter(line_y_ratio=args.line_y_ratio)
     fps = FPS().start()
 
     bench = Bench()
@@ -494,7 +511,8 @@ def main():
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
                 # count line
-                cv2.line(frame, (0, H // 2), (W, H // 2), (0, 255, 255), 2)
+                line_y = counter.get_line_y(H)
+                cv2.line(frame, (0, line_y), (W, line_y), (0, 255, 255), 2)
 
                 cv2.imshow("OpenVINO + Norfair (bbox-2points)", frame)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -544,5 +562,6 @@ def main():
 
 
 if __name__ == "__main__":
+    print(10//2)
     main()
 

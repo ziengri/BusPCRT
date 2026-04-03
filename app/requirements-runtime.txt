@@ -1,0 +1,5 @@
+numpy==2.3.5
+opencv-python==4.13.0.92
+openvino==2025.4.1
+imutils==0.5.4
+norfair-rs==0.4.1

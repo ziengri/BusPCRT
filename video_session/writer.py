@@ -43,10 +43,9 @@ class SessionWriter:
 
         self.start_timestamp = current_timestamp_ms()
         self.created_at = self.start_timestamp
-        base_name = build_session_basename(self.camera_id, self.start_timestamp)
-
-        self._video_path = self.output_dir / f"{base_name}.mkv"
-        self._meta_path = self.output_dir / f"{base_name}-meta.json"
+        self.base_name = build_session_basename(self.camera_id, self.start_timestamp)
+        self._video_path = self.output_dir / f"{self.base_name}.mkv"
+        self._meta_path = self.output_dir / f"{self.base_name}-meta.json"
         self._video_tmp_path = self._video_path.with_suffix(self._video_path.suffix + ".tmp")
         self._meta_tmp_path = self._meta_path.with_suffix(self._meta_path.suffix + ".tmp")
 

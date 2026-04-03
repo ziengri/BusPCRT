@@ -6,6 +6,9 @@ __pycache__/
 *.sogit
 *.mkv
 
+
+#Custom
+/dateset_tools
 example
 # Distribution / packaging
 .Python
