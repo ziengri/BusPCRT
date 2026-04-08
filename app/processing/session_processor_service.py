@@ -4,9 +4,9 @@ import time
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Protocol
 
 from app.ai.session_ai_runner import SessionAIRunner
-from app.door.door_state_reader import DoorStateReader
 from app.processing.result_sink import ResultSink
 from app.shared.session_storage import (
     SessionDirs,
@@ -18,12 +18,20 @@ from app.shared.types import ProcessedResult
 from video_session import SessionMeta
 
 
+class DoorReader(Protocol):
+    def read(self) -> bool:
+        ...
+
+    def close(self) -> None:
+        ...
+
+
 class SessionProcessorService:
-    """Processes ready sessions oldest-first."""
+    """Processes ready sessions oldest-first only while door is closed."""
 
     def __init__(
         self,
-        door_reader: DoorStateReader,
+        door_reader: DoorReader,
         ai_runner: SessionAIRunner,
         result_sink: ResultSink,
         session_dirs: SessionDirs,
@@ -47,6 +55,9 @@ class SessionProcessorService:
         return dt.strftime("%d.%m.%YT%H:%M")
 
     def process_one_if_allowed(self) -> bool:
+        if self.door_reader.read():
+            return False
+
         ready_meta = self._pick_oldest_ready()
         if ready_meta is None:
             # self._logger.debug("No ready sessions found")

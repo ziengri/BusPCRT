@@ -15,6 +15,11 @@ class _DoorClosed:
         return False
 
 
+class _DoorOpen:
+    def read(self) -> bool:
+        return True
+
+
 class _RunnerOk:
     def __init__(self, result: CountResult):
         self.result = result
@@ -94,4 +99,21 @@ def test_failure_moves_pair_to_failed(tmp_path: Path) -> None:
     assert len(list(dirs.ready.glob("*-meta.json"))) == 0
     assert len(list(dirs.processing.glob("*-meta.json"))) == 0
     assert len(list(dirs.failed.glob("*-meta.json"))) == 1
+    assert len(sink.rows) == 0
+
+
+def test_processor_skips_when_door_open(tmp_path: Path) -> None:
+    dirs = SessionDirs.from_root(tmp_path / "sessions")
+    dirs.ensure_exists()
+    meta = _make_pair(dirs.ready, 100)
+    sink = _SinkMem()
+    service = SessionProcessorService(
+        door_reader=_DoorOpen(),
+        ai_runner=_RunnerOk(CountResult(total_in=7, total_out=3, processed_frames=20)),
+        result_sink=sink,
+        session_dirs=dirs,
+    )
+
+    assert service.process_one_if_allowed() is False
+    assert meta.exists()
     assert len(sink.rows) == 0

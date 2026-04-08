@@ -9,7 +9,7 @@ if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from app.ai import AIRunnerConfig, SessionAIRunner
-from app.door import DoorStateReader
+from app.door import UdsDoorStateReader
 from app.processing import CombinedResultSink, CsvResultSink, SessionProcessorService, TimelineApiResultSink
 from app.shared import SessionDirs
 from app.utils import install_exception_logging, setup_logger
@@ -20,7 +20,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default=None, help="Path to JSON config file")
     parser.add_argument("--model", default=None, help="Path to OpenVINO model .xml")
     parser.add_argument("--sessions-dir", default="sessions", help="Root for active/ready/processing/failed")
-    parser.add_argument("--door-sock", default="door.sock", help="Unused temporary arg (kept for compatibility)")
+    parser.add_argument("--door-sock", default="door.sock", help="Unix Domain Socket path for door daemon")
+    parser.add_argument("--door-channel", dest="door_channel", type=int, default=None, help="Door channel from !DOORS packet")
+    parser.add_argument("--door-timeout", dest="door_timeout", type=float, default=0.5, help="UDS request timeout in seconds")
     parser.add_argument("--csv", default="results.csv", help="Output CSV file")
     parser.add_argument(
         "--timeline-url",
@@ -81,6 +83,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if not args.model:
         parser.error("Argument '--model' is required (CLI or config)")
+    if args.door_channel is None:
+        parser.error("Argument '--door-channel' is required (CLI or config)")
     return args
 
 
@@ -89,7 +93,12 @@ def main() -> int:
     setup_logger("processor")
     install_exception_logging()
 
-    door_reader = DoorStateReader(args.door_sock, initial_state=False)
+    door_reader = UdsDoorStateReader(
+        path=args.door_sock,
+        door_channel=args.door_channel,
+        timeout_s=args.door_timeout,
+        initial_state=False,
+    )
     session_dirs = SessionDirs.from_root(args.sessions_dir)
     result_sink = CombinedResultSink(
         TimelineApiResultSink(

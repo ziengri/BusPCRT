@@ -21,3 +21,6 @@ class DoorStateReader:
         elif raw == "false":
             self._last_state = False
         return self._last_state
+
+    def close(self) -> None:
+        return None
