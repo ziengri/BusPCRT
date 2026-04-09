@@ -102,7 +102,7 @@ def main() -> int:
                 buffer.extend(chunk)
                 packets = extract_packets(buffer)
                 for packet in packets:
-                    packet += b'\x3b'
+                    # packet += b'\x3b'
                     try:
                         doors = parse_packet(packet)
                     except ValueError as exc:
