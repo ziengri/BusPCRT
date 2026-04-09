@@ -1,91 +1,68 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
+
+from dotenv import dotenv_values
 
 if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from app.door import ChannelDoorStateReader
+from app.door import RecorderDoorStateReader
 from app.recording import OpenCVVideoSource, SessionRecorderService
 from app.shared import SessionDirs
 from app.utils import install_exception_logging, setup_logger
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def _env_defaults(env_file: str | None) -> dict[str, object]:
+    if not env_file:
+        return {}
+    path = Path(env_file)
+    if not path.exists():
+        return {}
+    raw = dotenv_values(path)
+    return {
+        "source": raw.get("SOURCE"),
+        "camera_id": raw.get("CAMERA_ID"),
+        "sessions_dir": raw.get("SESSIONS_DIR"),
+        "zmq_ipc_endpoint": raw.get("ZMQ_IPC_ENDPOINT"),
+        "door_channel": raw.get("DOOR_CHANNEL"),
+        "door_open_value": raw.get("DOOR_OPEN_VALUE"),
+        "width": raw.get("WIDTH"),
+        "height": raw.get("HEIGHT"),
+        "fps": raw.get("FPS"),
+        "idle_sleep": raw.get("IDLE_SLEEP"),
+    }
+
+
+def parse_args() -> argparse.Namespace:
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--env-file", default="recorder.env")
+    pre_args, _ = pre.parse_known_args()
+    env = _env_defaults(pre_args.env_file)
+
     parser = argparse.ArgumentParser(description="Door-gated recorder process")
-    parser.add_argument("--config", default=None, help="Path to recorder JSON config file")
-    parser.add_argument(
-        "--door-rs232-config",
-        dest="door_rs232_config",
-        default="door_rs232_config.json",
-        help="Path to shared RS232 JSON config file",
-    )
-    parser.add_argument("--source", default=None, help="RTSP/file/camera source for cv2.VideoCapture")
-    parser.add_argument("--camera-id", dest="camera_id", default=None, help="Camera id")
-    parser.add_argument("--sessions-dir", default="sessions", help="Root for active/ready/processing/failed")
-    parser.add_argument("--door-sock", default="door.sock", help="Path to door state file")
-    parser.add_argument("--door-channel", dest="door_channel", type=int, default=None, help="Door channel for this recorder")
+    parser.add_argument("--env-file", default=pre_args.env_file)
+    parser.add_argument("--source", default=None)
+    parser.add_argument("--camera-id", dest="camera_id", default=None)
+    parser.add_argument("--sessions-dir", default="sessions")
+    parser.add_argument("--zmq-ipc-endpoint", dest="zmq_ipc_endpoint", default="ipc:///run/atom/doors.sock")
+    parser.add_argument("--door-channel", dest="door_channel", type=int, default=None)
     parser.add_argument("--door-open-value", dest="door_open_value", type=int, default=1)
     parser.add_argument("--width", type=int, default=256)
     parser.add_argument("--height", type=int, default=256)
     parser.add_argument("--fps", type=int, default=25)
     parser.add_argument("--idle-sleep", dest="idle_sleep", type=float, default=0.05)
-    return parser
-
-
-def _load_config(path: str, parser: argparse.ArgumentParser) -> dict[str, object]:
-    cfg_path = Path(path)
-    try:
-        raw = cfg_path.read_text(encoding="utf-8")
-        payload = json.loads(raw)
-    except OSError as exc:
-        parser.error(f"Failed to read config file '{cfg_path}': {exc}")
-    except json.JSONDecodeError as exc:
-        parser.error(f"Failed to parse JSON config '{cfg_path}': {exc}")
-
-    if not isinstance(payload, dict):
-        parser.error(f"Config file '{cfg_path}' must contain a JSON object")
-
-    normalized: dict[str, object] = {}
-    for key, value in payload.items():
-        if not isinstance(key, str):
-            parser.error("All config keys must be strings")
-        normalized[key.replace("-", "_")] = value
-    return normalized
-
-
-def parse_args() -> argparse.Namespace:
-    pre_parser = argparse.ArgumentParser(add_help=False)
-    pre_parser.add_argument("--config", default=None)
-    pre_parser.add_argument("--door-rs232-config", dest="door_rs232_config", default="door_rs232_config.json")
-    pre_args, _ = pre_parser.parse_known_args()
-
-    parser = _build_parser()
-
-    if pre_args.door_rs232_config and Path(pre_args.door_rs232_config).exists():
-        shared_config = _load_config(pre_args.door_rs232_config, parser)
-        valid_keys = {action.dest for action in parser._actions}
-        filtered_shared = {k: v for k, v in shared_config.items() if k in valid_keys}
-        parser.set_defaults(**filtered_shared)
-
-    if pre_args.config:
-        recorder_config = _load_config(pre_args.config, parser)
-        valid_keys = {action.dest for action in parser._actions}
-        unknown = sorted(k for k in recorder_config if k not in valid_keys)
-        if unknown:
-            parser.error(f"Unknown keys in recorder config: {', '.join(unknown)}")
-        parser.set_defaults(**recorder_config)
+    parser.set_defaults(**{k: v for k, v in env.items() if v not in (None, "")})
 
     args = parser.parse_args()
     if not args.source:
-        parser.error("Argument '--source' is required (CLI or config)")
+        parser.error("--source is required (CLI or env)")
     if not args.camera_id:
-        parser.error("Argument '--camera-id' is required (CLI or config)")
+        parser.error("--camera-id is required (CLI or env)")
     if args.door_channel is None:
-        parser.error("Argument '--door-channel' is required (CLI or recorder config)")
+        parser.error("--door-channel is required (CLI or env)")
     return args
 
 
@@ -96,10 +73,10 @@ def main() -> int:
 
     source = OpenCVVideoSource(args.source)
     session_dirs = SessionDirs.from_root(args.sessions_dir)
-    door_reader = ChannelDoorStateReader(
-        path=args.door_sock,
-        door_channel=args.door_channel,
-        open_value=args.door_open_value,
+    door_reader = RecorderDoorStateReader(
+        endpoint=args.zmq_ipc_endpoint,
+        door_channel=int(args.door_channel),
+        open_value=int(args.door_open_value),
     )
 
     service = SessionRecorderService(

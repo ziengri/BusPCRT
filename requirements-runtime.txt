@@ -4,3 +4,5 @@ openvino==2025.4.1
 imutils==0.5.4
 norfair-rs==0.4.1
 pyserial==3.5
+pyzmq==27.0.2
+python-dotenv==1.1.1
