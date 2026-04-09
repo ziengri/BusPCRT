@@ -90,7 +90,6 @@ def main() -> int:
 
                 try:
                     chunk = ser.read(64)
-                    print(chunk)
 
                 except Exception as exc:  # noqa: BLE001
                     logger.error("Serial read error: %s", exc)
@@ -102,7 +101,6 @@ def main() -> int:
                 buffer.extend(chunk)
                 packets = extract_packets(buffer)
                 for packet in packets:
-                    # packet += b'\x3b'
                     try:
                         doors = parse_packet(packet)
                     except ValueError as exc:
