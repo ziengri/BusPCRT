@@ -81,8 +81,11 @@ class SessionRecorderService:
 
                 if frame is None:
                     if self.source.exhausted:
+                        self._logger.info("Source exhausted, restarting from beginning")
                         self._close_writer_to_ready()
-                        break
+                        if not self.source.reset():
+                            self._logger.error("Failed to restart exhausted source, stopping recorder")
+                            break
                     time.sleep(self.idle_sleep_s)
                     continue
 
