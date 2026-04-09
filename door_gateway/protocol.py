@@ -20,7 +20,7 @@ def parse_packet(packet: bytes) -> dict[int, int]:
         14: ord(";"),
         15: ord("3"),
         16: ord("="),
-        18: ord(";"),
+        # 18: ord(";"),
     }
     for idx, byte_value in expected_layout.items():
         if packet[idx] != byte_value:
