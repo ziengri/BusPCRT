@@ -89,7 +89,8 @@ def main() -> int:
                     last_heartbeat_ts = now
 
                 try:
-                    chunk = ser.read(cfg.bytesize)
+                    chunk = ser.read(64)
+                    print(chunk)
 
                 except Exception as exc:  # noqa: BLE001
                     logger.error("Serial read error: %s", exc)
