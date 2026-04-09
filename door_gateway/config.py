@@ -1,0 +1,87 @@
+from __future__ import annotations
+
+import argparse
+from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import dotenv_values
+
+
+@dataclass(slots=True)
+class GatewayConfig:
+    serial_port: str
+    baudrate: int
+    bytesize: int
+    parity: str
+    stopbits: float
+    serial_timeout: float
+    reconnect_sec: float
+    ipc_endpoint: str
+    stale_timeout_sec: float
+    heartbeat_publish_sec: float
+    log_level: str
+    log_file: str | None
+
+
+def _env_defaults(env_path: str | None) -> dict[str, object]:
+    if not env_path:
+        return {}
+    path = Path(env_path)
+    if not path.exists():
+        return {}
+    raw = dotenv_values(path)
+    return {
+        "serial_port": raw.get("SERIAL_PORT"),
+        "baudrate": raw.get("SERIAL_BAUDRATE"),
+        "bytesize": raw.get("SERIAL_BYTESIZE"),
+        "parity": raw.get("SERIAL_PARITY"),
+        "stopbits": raw.get("SERIAL_STOPBITS"),
+        "serial_timeout": raw.get("SERIAL_TIMEOUT"),
+        "reconnect_sec": raw.get("RECONNECT_SEC"),
+        "ipc_endpoint": raw.get("ZMQ_IPC_ENDPOINT"),
+        "stale_timeout_sec": raw.get("STALE_TIMEOUT_SEC"),
+        "heartbeat_publish_sec": raw.get("HEARTBEAT_PUBLISH_SEC"),
+        "log_level": raw.get("LOG_LEVEL"),
+        "log_file": raw.get("LOG_FILE"),
+    }
+
+
+def parse_gateway_args() -> GatewayConfig:
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--env-file", default="door_gateway.env")
+    pre_args, _ = pre.parse_known_args()
+    env = _env_defaults(pre_args.env_file)
+
+    parser = argparse.ArgumentParser(description="door_gateway: RS232 binary -> ZeroMQ PUB")
+    parser.add_argument("--env-file", default=pre_args.env_file)
+    parser.add_argument("--serial-port", dest="serial_port", default=None)
+    parser.add_argument("--baudrate", type=int, default=19200)
+    parser.add_argument("--bytesize", type=int, default=8)
+    parser.add_argument("--parity", default="N")
+    parser.add_argument("--stopbits", type=float, default=1.0)
+    parser.add_argument("--serial-timeout", dest="serial_timeout", type=float, default=0.2)
+    parser.add_argument("--reconnect-sec", dest="reconnect_sec", type=float, default=1.0)
+    parser.add_argument("--ipc-endpoint", dest="ipc_endpoint", default="ipc:///run/atom/doors.sock")
+    parser.add_argument("--stale-timeout-sec", dest="stale_timeout_sec", type=float, default=2.0)
+    parser.add_argument("--heartbeat-publish-sec", dest="heartbeat_publish_sec", type=float, default=0.5)
+    parser.add_argument("--log-level", dest="log_level", default="INFO")
+    parser.add_argument("--log-file", dest="log_file", default=None)
+
+    parser.set_defaults(**{k: v for k, v in env.items() if v not in (None, "")})
+    args = parser.parse_args()
+    if not args.serial_port:
+        parser.error("--serial-port is required (CLI or env)")
+    return GatewayConfig(
+        serial_port=str(args.serial_port),
+        baudrate=int(args.baudrate),
+        bytesize=int(args.bytesize),
+        parity=str(args.parity).upper(),
+        stopbits=float(args.stopbits),
+        serial_timeout=float(args.serial_timeout),
+        reconnect_sec=float(args.reconnect_sec),
+        ipc_endpoint=str(args.ipc_endpoint),
+        stale_timeout_sec=float(args.stale_timeout_sec),
+        heartbeat_publish_sec=float(args.heartbeat_publish_sec),
+        log_level=str(args.log_level).upper(),
+        log_file=str(args.log_file) if args.log_file else None,
+    )
