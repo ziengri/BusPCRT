@@ -2,7 +2,6 @@
   "model": "models/yolo26n-head-v2_int8_openvino_model/yolo26n-head-v2.xml",
   "sessions_dir": "sessions",
   "door_sock": "door.sock",
-  "door_channel": 1,
   "csv": "results.csv",
   "timeline_url": "http://5.129.252.183:8000/api/v1/timeline",
   "bus_id": "BUS320",

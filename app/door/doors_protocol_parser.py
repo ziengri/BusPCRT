@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 class DoorsProtocolParser:
-    """Parses lines like '!DOORS;1=1;2=0;3=1' into {channel: value}."""
+    """Parses lines like '!DOORS;1=1;2=0;3=1' or '!DOORS:1=1;2=0;3=1'."""
 
     PREFIX = "!DOORS"
 
@@ -17,11 +17,15 @@ class DoorsProtocolParser:
         if raw == self.PREFIX:
             return {}
 
-        prefix = f"{self.PREFIX};"
-        if not raw.startswith(prefix):
+        if raw.startswith(f"{self.PREFIX};"):
+            payload = raw[len(self.PREFIX) + 1 :]
+        elif raw.startswith(f"{self.PREFIX}:"):
+            payload = raw[len(self.PREFIX) + 1 :]
+        else:
             raise ValueError(f"Invalid door protocol prefix: {raw}")
 
-        payload = raw[len(prefix):]
+        # Allow optional trailing ';' in wire packet.
+        payload = payload.rstrip(";").strip()
         if not payload:
             return {}
 
@@ -43,4 +47,3 @@ class DoorsProtocolParser:
             result[channel] = value
 
         return result
-
