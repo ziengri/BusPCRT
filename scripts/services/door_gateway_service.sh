@@ -69,6 +69,8 @@ After=network.target
 
 [Service]
 Type=simple
+User=user
+Group=user
 WorkingDirectory=${project_root}
 EnvironmentFile=${env_file}
 ExecStart=${python_bin} app/run_door_daemon.py --env-file ${env_file}
