@@ -9,6 +9,7 @@ __pycache__/
 
 #Custom
 /dateset_tools
+/sessions/*
 example
 # Distribution / packaging
 .Python

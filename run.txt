@@ -1,2 +1,0 @@
-python app/run_recorder.py --source "rtsp://..." --camera-id cam1 --sessions-dir sessions --door-sock door.sock --width 256 --height 256 --fps 25
-python app/run_processor.py --model "models\yolo26n-head_int8_openvino_model\yolo26n-head.xml" --sessions-dir sessions --door-sock door.sock --csv results.csv
