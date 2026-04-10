@@ -106,7 +106,7 @@ install_service() {
 
   project_root="$(abs_path "$project_root")"
   env_file="$(abs_path "$env_file")"
-  python_bin="$(abs_path "$python_bin")"
+  # python_bin="$(abs_path "$python_bin")"
 
   [[ -d "$project_root" ]] || { log_error "Project root not found: $project_root"; exit 1; }
   [[ -f "$env_file" ]] || { log_error "Env file not found: $env_file"; exit 1; }
