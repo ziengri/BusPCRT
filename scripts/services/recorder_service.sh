@@ -56,8 +56,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=user
-Group=user
+User=root
+Group=root
 ExecStart=/bin/false
 Restart=always
 RestartSec=1
