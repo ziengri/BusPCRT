@@ -41,6 +41,8 @@ def _env_defaults(env_file: str | None) -> dict[str, object]:
         "device": raw.get("DEVICE"),
         "target_width": raw.get("TARGET_WIDTH"),
         "line_y_ratio": raw.get("LINE_Y_RATIO"),
+        "ai_debug": raw.get("AI_DEBUG"),
+        "ai_debug_video_each": raw.get("AI_DEBUG_VIDEO_EACH"),
     }
 
 
@@ -69,6 +71,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="CPU")
     parser.add_argument("--target-width", dest="target_width", type=int, default=256)
     parser.add_argument("--line-y-ratio", dest="line_y_ratio", type=float, default=0.3)
+    parser.add_argument("--ai-debug", dest="ai_debug", type=int, default=0)
+    parser.add_argument("--ai-debug-video-each", dest="ai_debug_video_each", type=int, default=0)
     parser.set_defaults(**{k: v for k, v in env.items() if v not in (None, "")})
 
     args = parser.parse_args()
@@ -104,6 +108,8 @@ def main() -> int:
             device=args.device,
             target_width=int(args.target_width),
             line_y_ratio=float(args.line_y_ratio),
+            ai_debug=bool(int(args.ai_debug)),
+            ai_debug_video_each=int(args.ai_debug_video_each),
         )
     )
 

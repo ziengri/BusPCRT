@@ -9,6 +9,7 @@ class CountResult:
     total_in: int
     total_out: int
     processed_frames: int = 0
+    debug_video_path: Path | None = None
 
 
 @dataclass(slots=True)

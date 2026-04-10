@@ -9,7 +9,8 @@ from dotenv import dotenv_values
 
 @dataclass(slots=True)
 class GatewayConfig:
-    serial_port: str
+    serial_port: str | None
+    serial_port_find: str | None
     baudrate: int
     bytesize: int
     parity: str
@@ -32,6 +33,7 @@ def _env_defaults(env_path: str | None) -> dict[str, object]:
     raw = dotenv_values(path)
     return {
         "serial_port": raw.get("SERIAL_PORT"),
+        "serial_port_find": raw.get("SERIAL_PORT_FIND"),
         "baudrate": raw.get("SERIAL_BAUDRATE"),
         "bytesize": raw.get("SERIAL_BYTESIZE"),
         "parity": raw.get("SERIAL_PARITY"),
@@ -55,6 +57,7 @@ def parse_gateway_args() -> GatewayConfig:
     parser = argparse.ArgumentParser(description="door_gateway: RS232 binary -> ZeroMQ PUB")
     parser.add_argument("--env-file", default=pre_args.env_file)
     parser.add_argument("--serial-port", dest="serial_port", default=None)
+    parser.add_argument("--serial-port-find", dest="serial_port_find", default=None)
     parser.add_argument("--baudrate", type=int, default=19200)
     parser.add_argument("--bytesize", type=int, default=8)
     parser.add_argument("--parity", default="N")
@@ -69,10 +72,13 @@ def parse_gateway_args() -> GatewayConfig:
 
     parser.set_defaults(**{k: v for k, v in env.items() if v not in (None, "")})
     args = parser.parse_args()
-    if not args.serial_port:
-        parser.error("--serial-port is required (CLI or env)")
+    serial_port = str(args.serial_port).strip() if args.serial_port is not None else None
+    serial_port_find = str(args.serial_port_find).strip() if args.serial_port_find is not None else None
+    if not serial_port and not serial_port_find:
+        parser.error("At least one is required: --serial-port or --serial-port-find (CLI or env)")
     return GatewayConfig(
-        serial_port=str(args.serial_port),
+        serial_port=serial_port or None,
+        serial_port_find=serial_port_find or None,
         baudrate=int(args.baudrate),
         bytesize=int(args.bytesize),
         parity=str(args.parity).upper(),

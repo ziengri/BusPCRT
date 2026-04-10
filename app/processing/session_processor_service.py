@@ -77,6 +77,8 @@ class SessionProcessorService:
                     meta_path=processing_meta,
                 )
             )
+            if count_result.debug_video_path is not None:
+                self._logger.info("AI debug video: %s", count_result.debug_video_path)
             self._logger.info("Complete AI processing,session: %s", processing_meta.name)
 
             delete_session_pair(processing_meta)
