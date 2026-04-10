@@ -89,12 +89,12 @@ def main() -> int:
     door_reader = ProcessorDoorStateReader(endpoint=args.zmq_ipc_endpoint)
     session_dirs = SessionDirs.from_root(args.sessions_dir)
     result_sink = CombinedResultSink(
-        TimelineApiResultSink(
-            url=args.timeline_url,
-            bus=args.bus_id,
-            timeout_s=float(args.api_timeout),
-        ),
         CsvResultSink(args.csv),
+        # TimelineApiResultSink(
+        #     url=args.timeline_url,
+        #     bus=args.bus_id,
+        #     timeout_s=float(args.api_timeout),
+        # ),
     )
     ai_runner = SessionAIRunner(
         AIRunnerConfig(
