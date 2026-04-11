@@ -8,6 +8,9 @@ __pycache__/
 
 
 #Custom
+typescript
+results.csv
+uv.lock
 /dateset_tools
 /sessions/*
 example

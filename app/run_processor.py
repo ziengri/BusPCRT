@@ -90,11 +90,11 @@ def main() -> int:
     session_dirs = SessionDirs.from_root(args.sessions_dir)
     result_sink = CombinedResultSink(
         CsvResultSink(args.csv),
-        # TimelineApiResultSink(
-        #     url=args.timeline_url,
-        #     bus=args.bus_id,
-        #     timeout_s=float(args.api_timeout),
-        # ),
+        TimelineApiResultSink(
+            url=args.timeline_url,
+            bus=args.bus_id,
+            timeout_s=float(args.api_timeout),
+        ),
     )
     ai_runner = SessionAIRunner(
         AIRunnerConfig(
