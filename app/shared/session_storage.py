@@ -15,6 +15,7 @@ class SessionDirs:
     ready: Path
     processing: Path
     failed: Path
+    saved: Path
 
     @classmethod
     def from_root(cls, root: str | Path) -> "SessionDirs":
@@ -25,10 +26,11 @@ class SessionDirs:
             ready=root_path / "ready",
             processing=root_path / "processing",
             failed=root_path / "failed",
+            saved=root_path / "saved",
         )
 
     def ensure_exists(self) -> None:
-        for path in (self.root, self.active, self.ready, self.processing, self.failed):
+        for path in (self.root, self.active, self.ready, self.processing, self.failed, self.saved):
             path.mkdir(parents=True, exist_ok=True)
 
 

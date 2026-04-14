@@ -43,6 +43,7 @@ def _env_defaults(env_file: str | None) -> dict[str, object]:
         "line_y_ratio": raw.get("LINE_Y_RATIO"),
         "ai_debug": raw.get("AI_DEBUG"),
         "ai_debug_video_each": raw.get("AI_DEBUG_VIDEO_EACH"),
+        "save_video": raw.get("SAVE_VIDEO"),
     }
 
 
@@ -73,6 +74,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--line-y-ratio", dest="line_y_ratio", type=float, default=0.3)
     parser.add_argument("--ai-debug", dest="ai_debug", type=int, default=0)
     parser.add_argument("--ai-debug-video-each", dest="ai_debug_video_each", type=int, default=0)
+    parser.add_argument("--save-video", dest="save_video", type=int, default=0)
     parser.set_defaults(**{k: v for k, v in env.items() if v not in (None, "")})
 
     args = parser.parse_args()
@@ -118,6 +120,7 @@ def main() -> int:
         ai_runner=ai_runner,
         result_sink=result_sink,
         session_dirs=session_dirs,
+        save_video=bool(int(args.save_video)),
         idle_sleep_s=float(args.idle_sleep),
     )
     service.run_forever()

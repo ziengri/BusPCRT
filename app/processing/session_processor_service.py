@@ -35,12 +35,14 @@ class SessionProcessorService:
         ai_runner: SessionAIRunner,
         result_sink: ResultSink,
         session_dirs: SessionDirs,
+        save_video: bool = False,
         idle_sleep_s: float = 0.5,
     ):
         self.door_reader = door_reader
         self.ai_runner = ai_runner
         self.result_sink = result_sink
         self.session_dirs = session_dirs
+        self.save_video = bool(save_video)
         self.idle_sleep_s = float(idle_sleep_s)
         self.session_dirs.ensure_exists()
         self._logger = logging.getLogger(__name__)
@@ -81,7 +83,11 @@ class SessionProcessorService:
                 self._logger.info("AI debug video: %s", count_result.debug_video_path)
             self._logger.info("Complete AI processing,session: %s", processing_meta.name)
 
-            delete_session_pair(processing_meta)
+            if self.save_video:
+                saved_meta = move_session_pair(processing_meta, self.session_dirs.saved)
+                self._logger.info("Session moved to saved: %s", saved_meta.name)
+            else:
+                delete_session_pair(processing_meta)
         except Exception:  # noqa: BLE001
             move_session_pair(processing_meta, self.session_dirs.failed)
             self._logger.exception("Session processing failed: %s", processing_meta.name)
