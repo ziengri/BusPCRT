@@ -72,7 +72,7 @@ def parse_gateway_args() -> GatewayConfig:
     parser.add_argument("--stopbits", type=float, default=1.0)
     parser.add_argument("--serial-timeout", dest="serial_timeout", type=float, default=0.2)
     parser.add_argument("--reconnect-sec", dest="reconnect_sec", type=float, default=1.0)
-    parser.add_argument("--ipc-endpoint", dest="ipc_endpoint", default="ipc:///run/atom/doors.sock")
+    parser.add_argument("--ipc-endpoint", dest="ipc_endpoint", default="ipc:///run/doors.sock")
     parser.add_argument("--stale-timeout-sec", dest="stale_timeout_sec", type=float, default=2.0)
     parser.add_argument("--heartbeat-publish-sec", dest="heartbeat_publish_sec", type=float, default=0.5)
     parser.add_argument("--log-level", dest="log_level", default="INFO")

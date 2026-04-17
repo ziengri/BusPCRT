@@ -10,7 +10,7 @@ import zmq
 
 
 def _load_endpoint(config_env: str, env_file: str) -> str:
-    endpoint = "ipc:///run/atom/doors.sock"
+    endpoint = "ipc:///run/doors.sock"
     for file_path in (config_env, env_file):
         path = Path(file_path)
         if not path.exists():

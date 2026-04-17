@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source", default=None)
     parser.add_argument("--camera-id", dest="camera_id", default=None)
     parser.add_argument("--sessions-dir", default="sessions")
-    parser.add_argument("--zmq-ipc-endpoint", dest="zmq_ipc_endpoint", default="ipc:///run/atom/doors.sock")
+    parser.add_argument("--zmq-ipc-endpoint", dest="zmq_ipc_endpoint", default="ipc:///run/doors.sock")
     parser.add_argument("--door-channel", dest="door_channel", type=int, default=None)
     parser.add_argument("--door-open-value", dest="door_open_value", type=int, default=1)
     parser.add_argument("--width", type=int, default=256)

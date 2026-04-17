@@ -49,7 +49,7 @@ def _read_key_nonblocking(timeout_sec: float = 0.1) -> str | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Interactive ZeroMQ door state simulator")
-    parser.add_argument("--endpoint", default="ipc:///run/atom/doors.sock")
+    parser.add_argument("--endpoint", default="ipc:///run/doors.sock")
     parser.add_argument("--heartbeat-sec", type=float, default=0.5)
     args = parser.parse_args()
 
