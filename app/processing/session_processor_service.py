@@ -79,6 +79,9 @@ class SessionProcessorService:
                     meta_path=processing_meta,
                 )
             )
+            flush_pending = getattr(self.result_sink, "flush_pending", None)
+            if callable(flush_pending):
+                flush_pending()
             if count_result.debug_video_path is not None:
                 self._logger.info("AI debug video: %s", count_result.debug_video_path)
             self._logger.info("Complete AI processing,session: %s", processing_meta.name)
@@ -98,9 +101,6 @@ class SessionProcessorService:
         while True:
             processed = False
             try:
-                flush_pending = getattr(self.result_sink, "flush_pending", None)
-                if callable(flush_pending):
-                    flush_pending()
                 processed = self.process_one_if_allowed()
             except Exception:  # noqa: BLE001
                 self._logger.exception("Processor loop error")
