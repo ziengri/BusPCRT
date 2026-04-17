@@ -14,7 +14,7 @@ ExecStart=/usr/bin/autossh -M 0 -N \
   -o "StrictHostKeyChecking accept-new" \
   -i /root/.ssh/id_ed25519_vps_tunnel \
   -R __REVERSE_PORT__:localhost:22 \
-  tunnel@89.124.69.165
+  tunnel@176.57.213.35
 Restart=always
 RestartSec=5
 
