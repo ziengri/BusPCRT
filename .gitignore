@@ -11,7 +11,7 @@ __pycache__/
 typescript
 results.csv
 uv.lock
-/dateset_tools
+/dataset_tools
 /sessions/*
 example
 # Distribution / packaging
