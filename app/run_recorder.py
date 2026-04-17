@@ -38,6 +38,7 @@ def _env_defaults(env_file: str | None, config_env_file: str | None) -> dict[str
         "width": raw.get("WIDTH"),
         "height": raw.get("HEIGHT"),
         "fps": raw.get("FPS"),
+        "max_session_seconds": raw.get("MAX_SESSION_SECONDS"),
         "idle_sleep": raw.get("IDLE_SLEEP"),
     }
 
@@ -61,6 +62,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--width", type=int, default=256)
     parser.add_argument("--height", type=int, default=256)
     parser.add_argument("--fps", type=int, default=25)
+    parser.add_argument("--max-session-seconds", dest="max_session_seconds", type=float, default=300.0)
     parser.add_argument("--idle-sleep", dest="idle_sleep", type=float, default=0.05)
     parser.set_defaults(**{k: v for k, v in env.items() if v not in (None, "")})
 
@@ -95,6 +97,7 @@ def main() -> int:
         width=args.width,
         height=args.height,
         fps=args.fps,
+        max_session_seconds=float(args.max_session_seconds),
         idle_sleep_s=args.idle_sleep,
     )
     service.run_forever()
