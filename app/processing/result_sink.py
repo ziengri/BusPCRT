@@ -42,11 +42,13 @@ class TimelineApiResultSink:
         bus: str = "BUS320",
         timeout_s: float = 10.0,
         buses_url: str | None = None,
+        x_auth: str = "pcrt!af3g",
     ):
         self.url = url
         self.buses_url = buses_url or self._derive_buses_url(url)
         self.bus = bus
         self.timeout_s = float(timeout_s)
+        self.x_auth = x_auth
         self._known_buses: set[str] = set()
         self._buses_cache_loaded = False
 
@@ -78,6 +80,7 @@ class TimelineApiResultSink:
             headers={
                 "accept": "application/json",
                 "Content-Type": "application/x-www-form-urlencoded",
+                "X-AUTH": self.x_auth,
             },
         )
         try:
@@ -90,7 +93,14 @@ class TimelineApiResultSink:
             return int(exc.code), body
 
     def _http_get_json(self, url: str) -> tuple[int, object]:
-        req = request.Request(url, method="GET", headers={"accept": "application/json"})
+        req = request.Request(
+            url,
+            method="GET",
+            headers={
+                "accept": "application/json",
+                "X-AUTH": self.x_auth,
+            },
+        )
         try:
             with request.urlopen(req, timeout=self.timeout_s) as resp:
                 status = getattr(resp, "status", 200)
