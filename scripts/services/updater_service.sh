@@ -11,7 +11,7 @@ log_info() {
 }
 
 log_error() {
-  echo "[ERRORS] $*" >&2
+  echo "[ERROR] $*" >&2
 }
 
 require_root() {
