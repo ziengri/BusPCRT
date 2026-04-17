@@ -98,6 +98,9 @@ class SessionProcessorService:
         while True:
             processed = False
             try:
+                flush_pending = getattr(self.result_sink, "flush_pending", None)
+                if callable(flush_pending):
+                    flush_pending()
                 processed = self.process_one_if_allowed()
             except Exception:  # noqa: BLE001
                 self._logger.exception("Processor loop error")

@@ -15,13 +15,19 @@ from app.shared import SessionDirs
 from app.utils import install_exception_logging, setup_logger
 
 
-def _env_defaults(env_file: str | None) -> dict[str, object]:
-    if not env_file:
+def _load_env(path_value: str | None) -> dict[str, object]:
+    if not path_value:
         return {}
-    path = Path(env_file)
+    path = Path(path_value)
     if not path.exists():
         return {}
-    raw = dotenv_values(path)
+    return {k: v for k, v in dotenv_values(path).items() if v not in (None, "")}
+
+
+def _env_defaults(env_file: str | None, config_env_file: str | None) -> dict[str, object]:
+    raw: dict[str, object] = {}
+    raw.update(_load_env(config_env_file))
+    raw.update(_load_env(env_file))
     return {
         "source": raw.get("SOURCE"),
         "camera_id": raw.get("CAMERA_ID"),
@@ -38,11 +44,13 @@ def _env_defaults(env_file: str | None) -> dict[str, object]:
 
 def parse_args() -> argparse.Namespace:
     pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--config-env-file", default="config.env")
     pre.add_argument("--env-file", default="recorder.env")
     pre_args, _ = pre.parse_known_args()
-    env = _env_defaults(pre_args.env_file)
+    env = _env_defaults(pre_args.env_file, pre_args.config_env_file)
 
     parser = argparse.ArgumentParser(description="Door-gated recorder process")
+    parser.add_argument("--config-env-file", default=pre_args.config_env_file)
     parser.add_argument("--env-file", default=pre_args.env_file)
     parser.add_argument("--source", default=None)
     parser.add_argument("--camera-id", dest="camera_id", default=None)

@@ -24,13 +24,19 @@ class GatewayConfig:
     log_file: str | None
 
 
-def _env_defaults(env_path: str | None) -> dict[str, object]:
-    if not env_path:
+def _load_env(path_value: str | None) -> dict[str, object]:
+    if not path_value:
         return {}
-    path = Path(env_path)
+    path = Path(path_value)
     if not path.exists():
         return {}
-    raw = dotenv_values(path)
+    return {k: v for k, v in dotenv_values(path).items() if v not in (None, "")}
+
+
+def _env_defaults(env_path: str | None, config_env_path: str | None) -> dict[str, object]:
+    raw: dict[str, object] = {}
+    raw.update(_load_env(config_env_path))
+    raw.update(_load_env(env_path))
     return {
         "serial_port": raw.get("SERIAL_PORT"),
         "serial_port_find": raw.get("SERIAL_PORT_FIND"),
@@ -50,11 +56,13 @@ def _env_defaults(env_path: str | None) -> dict[str, object]:
 
 def parse_gateway_args() -> GatewayConfig:
     pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--config-env-file", default="config.env")
     pre.add_argument("--env-file", default="door_gateway.env")
     pre_args, _ = pre.parse_known_args()
-    env = _env_defaults(pre_args.env_file)
+    env = _env_defaults(pre_args.env_file, pre_args.config_env_file)
 
     parser = argparse.ArgumentParser(description="door_gateway: RS232 binary -> ZeroMQ PUB")
+    parser.add_argument("--config-env-file", default=pre_args.config_env_file)
     parser.add_argument("--env-file", default=pre_args.env_file)
     parser.add_argument("--serial-port", dest="serial_port", default=None)
     parser.add_argument("--serial-port-find", dest="serial_port_find", default=None)

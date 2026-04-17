@@ -11,25 +11,36 @@ if __package__ is None or __package__ == "":
 
 from app.ai import AIRunnerConfig, SessionAIRunner
 from app.door import ProcessorDoorStateReader
-from app.processing import CombinedResultSink, CsvResultSink, SessionProcessorService, TimelineApiResultSink
+from app.processing import BufferedTimelineResultSink, SessionProcessorService
 from app.shared import SessionDirs
 from app.utils import install_exception_logging, setup_logger
 
 
-def _env_defaults(env_file: str | None) -> dict[str, object]:
-    if not env_file:
+def _load_env(path_value: str | None) -> dict[str, object]:
+    if not path_value:
         return {}
-    path = Path(env_file)
+    path = Path(path_value)
     if not path.exists():
         return {}
-    raw = dotenv_values(path)
+    return {k: v for k, v in dotenv_values(path).items() if v not in (None, "")}
+
+
+def _env_defaults(
+    env_file: str | None,
+    config_env_file: str | None,
+    device_env_file: str | None,
+) -> dict[str, object]:
+    raw: dict[str, object] = {}
+    raw.update(_load_env(config_env_file))
+    raw.update(_load_env(env_file))
+    device_raw = _load_env(device_env_file)
     return {
         "model": raw.get("MODEL_PATH"),
         "sessions_dir": raw.get("SESSIONS_DIR"),
         "zmq_ipc_endpoint": raw.get("ZMQ_IPC_ENDPOINT"),
-        "csv": raw.get("CSV_PATH"),
         "timeline_url": raw.get("TIMELINE_URL"),
-        "bus_id": raw.get("BUS_ID"),
+        "timeline_outbox_db": raw.get("TIMELINE_OUTBOX_DB"),
+        "bus_id": device_raw.get("BUS_ID", raw.get("BUS_ID")),
         "api_timeout": raw.get("API_TIMEOUT"),
         "idle_sleep": raw.get("IDLE_SLEEP"),
         "confidence": raw.get("CONFIDENCE"),
@@ -49,17 +60,25 @@ def _env_defaults(env_file: str | None) -> dict[str, object]:
 
 def parse_args() -> argparse.Namespace:
     pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--config-env-file", default="config.env")
+    pre.add_argument("--device-env-file", default="/etc/pcrt/device.env")
     pre.add_argument("--env-file", default="processor.env")
     pre_args, _ = pre.parse_known_args()
-    env = _env_defaults(pre_args.env_file)
+    env = _env_defaults(
+        pre_args.env_file,
+        pre_args.config_env_file,
+        pre_args.device_env_file,
+    )
 
     parser = argparse.ArgumentParser(description="Oldest-first session processor process")
+    parser.add_argument("--config-env-file", default=pre_args.config_env_file)
+    parser.add_argument("--device-env-file", default=pre_args.device_env_file)
     parser.add_argument("--env-file", default=pre_args.env_file)
     parser.add_argument("--model", default=None)
     parser.add_argument("--sessions-dir", default="sessions")
     parser.add_argument("--zmq-ipc-endpoint", dest="zmq_ipc_endpoint", default="ipc:///run/atom/doors.sock")
-    parser.add_argument("--csv", default="results.csv")
     parser.add_argument("--timeline-url", default="http://5.129.252.183:8000/api/v1/timeline")
+    parser.add_argument("--timeline-outbox-db", dest="timeline_outbox_db", default=None)
     parser.add_argument("--bus-id", dest="bus_id", default="BUS320")
     parser.add_argument("--api-timeout", dest="api_timeout", type=float, default=10.0)
     parser.add_argument("--idle-sleep", dest="idle_sleep", type=float, default=0.1)
@@ -90,13 +109,16 @@ def main() -> int:
 
     door_reader = ProcessorDoorStateReader(endpoint=args.zmq_ipc_endpoint)
     session_dirs = SessionDirs.from_root(args.sessions_dir)
-    result_sink = CombinedResultSink(
-        CsvResultSink(args.csv),
-        TimelineApiResultSink(
-            url=args.timeline_url,
-            bus=args.bus_id,
-            timeout_s=float(args.api_timeout),
-        ),
+    outbox_db = (
+        Path(args.timeline_outbox_db)
+        if args.timeline_outbox_db
+        else session_dirs.root / "outbox" / "timeline_outbox.sqlite"
+    )
+    result_sink = BufferedTimelineResultSink(
+        url=args.timeline_url,
+        bus=args.bus_id,
+        timeout_s=float(args.api_timeout),
+        outbox_db=outbox_db,
     )
     ai_runner = SessionAIRunner(
         AIRunnerConfig(
