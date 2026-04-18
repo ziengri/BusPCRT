@@ -65,7 +65,7 @@ install_service() {
   cat >"$UNIT_PATH" <<EOF
 [Unit]
 Description=BusPCRT Processor Service
-After=network.target
+After=network.target buspcrt-sessions-cleanup.service
 
 [Service]
 Type=simple

@@ -52,7 +52,7 @@ write_template_unit() {
   cat >"$TEMPLATE_UNIT_PATH" <<'EOF'
 [Unit]
 Description=BusPCRT Recorder Service (%i)
-After=network.target
+After=network.target buspcrt-sessions-cleanup.service
 
 [Service]
 Type=simple
