@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import os
 import re
 import sqlite3
 import time
@@ -42,13 +43,13 @@ class TimelineApiResultSink:
         bus: str = "BUS320",
         timeout_s: float = 10.0,
         buses_url: str | None = None,
-        x_auth: str = "pcrt!af3g",
+        x_auth: str | None = None,
     ):
         self.url = url
         self.buses_url = buses_url or self._derive_buses_url(url)
         self.bus = bus
         self.timeout_s = float(timeout_s)
-        self.x_auth = x_auth
+        self.x_auth = x_auth or os.getenv("API_X_AUTH", "pcrt!af3g")
         self._known_buses: set[str] = set()
         self._buses_cache_loaded = False
 
@@ -136,7 +137,7 @@ class TimelineApiResultSink:
 
         payload = {
             "bus": bus,
-            "cameraCount": int(max(1, camera_count)),
+            "cameraCount": 3,
         }
         status, body = self._http_form(self.buses_url, payload=payload, method="POST")
         if status not in (200, 201, 409):
@@ -185,12 +186,14 @@ class BufferedTimelineResultSink:
         timeout_s: float = 10.0,
         outbox_db: str | Path = "sessions/outbox/timeline_outbox.sqlite",
         buses_url: str | None = None,
+        x_auth: str | None = None,
     ):
         self.timeline_sink = TimelineApiResultSink(
             url=url,
             bus=bus,
             timeout_s=timeout_s,
             buses_url=buses_url,
+            x_auth=x_auth,
         )
         self.outbox_db = Path(outbox_db)
         self.outbox_db.parent.mkdir(parents=True, exist_ok=True)

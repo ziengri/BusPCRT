@@ -6,15 +6,35 @@ import threading
 _exception_hooks_installed = False
 
 
-def setup_logger(camId: str) -> None:
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format=f"%(asctime)s | %(levelname)s | [{camId}] | %(name)s | %(message)s",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(f"app-{camId}.log", encoding="utf-8")
-        ],
-    )
+class _MaxLevelFilter(logging.Filter):
+    def __init__(self, max_level: int):
+        super().__init__()
+        self.max_level = int(max_level)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.levelno <= self.max_level
+
+
+def setup_logger(cam_id: str, log_file: str | None = None) -> None:
+    fmt = f"%(asctime)s | %(levelname)s | [{cam_id}] | %(name)s | %(message)s"
+
+    stdout_handler = logging.StreamHandler(stream=sys.stdout)
+    stdout_handler.setLevel(logging.DEBUG)
+    stdout_handler.addFilter(_MaxLevelFilter(logging.WARNING))
+    stdout_handler.setFormatter(logging.Formatter(fmt))
+
+    stderr_handler = logging.StreamHandler(stream=sys.stderr)
+    stderr_handler.setLevel(logging.ERROR)
+    stderr_handler.setFormatter(logging.Formatter(fmt))
+
+    handlers: list[logging.Handler] = [stdout_handler, stderr_handler]
+    if log_file:
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(logging.Formatter(fmt))
+        handlers.append(file_handler)
+
+    logging.basicConfig(level=logging.DEBUG, handlers=handlers, force=True)
 
 
 def install_exception_logging(logger_name: str | None = None) -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from urllib import parse
 
 from dotenv import dotenv_values
 
@@ -25,6 +26,15 @@ def _load_env(path_value: str | None) -> dict[str, object]:
     return {k: v for k, v in dotenv_values(path).items() if v not in (None, "")}
 
 
+def _derive_timeline_url(api_base_url: str | None) -> str | None:
+    if not api_base_url:
+        return None
+    parsed = parse.urlsplit(str(api_base_url))
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return parse.urlunsplit((parsed.scheme, parsed.netloc, "/api/v1/timeline", "", ""))
+
+
 def _env_defaults(
     env_file: str | None,
     config_env_file: str | None,
@@ -38,9 +48,10 @@ def _env_defaults(
         "model": raw.get("MODEL_PATH"),
         "sessions_dir": raw.get("SESSIONS_DIR"),
         "zmq_ipc_endpoint": raw.get("ZMQ_IPC_ENDPOINT"),
-        "timeline_url": raw.get("TIMELINE_URL"),
+        "timeline_url": raw.get("TIMELINE_URL") or _derive_timeline_url(raw.get("API_BASE_URL")),
         "timeline_outbox_db": raw.get("TIMELINE_OUTBOX_DB"),
         "bus_id": device_raw.get("BUS_ID", raw.get("BUS_ID")),
+        "api_x_auth": raw.get("API_X_AUTH"),
         "api_timeout": raw.get("API_TIMEOUT"),
         "idle_sleep": raw.get("IDLE_SLEEP"),
         "confidence": raw.get("CONFIDENCE"),
@@ -80,6 +91,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeline-url", default="http://5.129.252.183:8000/api/v1/timeline")
     parser.add_argument("--timeline-outbox-db", dest="timeline_outbox_db", default=None)
     parser.add_argument("--bus-id", dest="bus_id", default="BUS320")
+    parser.add_argument("--api-x-auth", dest="api_x_auth", default=None)
     parser.add_argument("--api-timeout", dest="api_timeout", type=float, default=10.0)
     parser.add_argument("--idle-sleep", dest="idle_sleep", type=float, default=0.1)
     parser.add_argument("--confidence", type=float, default=0.45)
@@ -119,6 +131,7 @@ def main() -> int:
         bus=args.bus_id,
         timeout_s=float(args.api_timeout),
         outbox_db=outbox_db,
+        x_auth=args.api_x_auth,
     )
     ai_runner = SessionAIRunner(
         AIRunnerConfig(
