@@ -104,6 +104,24 @@ class MonitorOutbox:
             conn.execute("DELETE FROM pending_status WHERE slot = 1")
             conn.commit()
 
+    def set_last_status(self, payload: dict[str, Any], reported_at: str) -> None:
+        self.set_state("status:last_payload", json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True))
+        self.set_state("status:last_reported_at", reported_at)
+        self.set_state("status:last_updated_at", str(time.time()))
+
+    def get_last_status(self) -> dict[str, Any] | None:
+        raw = self.get_state("status:last_payload")
+        if not raw:
+            return None
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def get_last_status_reported_at(self) -> str | None:
+        return self.get_state("status:last_reported_at")
+
     def count_pending_status(self) -> int:
         with self._connect() as conn:
             value = conn.execute("SELECT COUNT(*) FROM pending_status").fetchone()

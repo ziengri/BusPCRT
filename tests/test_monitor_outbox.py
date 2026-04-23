@@ -57,3 +57,13 @@ def test_event_queue_retry_and_send_delete(tmp_path: Path) -> None:
     retry_rows = outbox.get_due_events(limit=10)
     outbox.mark_events_sent([int(row["id"]) for row in retry_rows])
     assert outbox.count_pending_events() == 0
+
+
+def test_last_status_cache_roundtrip(tmp_path: Path) -> None:
+    outbox = MonitorOutbox(tmp_path / "monitor.sqlite")
+    payload = {"bus": "BUS-1", "reportedAt": "2026-01-01T10:00:00Z"}
+
+    outbox.set_last_status(payload, "2026-01-01T10:00:00Z")
+
+    assert outbox.get_last_status() == payload
+    assert outbox.get_last_status_reported_at() == "2026-01-01T10:00:00Z"

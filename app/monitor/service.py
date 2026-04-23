@@ -416,6 +416,17 @@ class MonitorService:
             ),
             reported_at,
         )
+        self.outbox.set_last_status(
+            self._build_status_snapshot(
+                reported_at=reported_at,
+                connectivity=connectivity,
+                cameras=cameras,
+                services=services,
+                storage=storage,
+                buffers=final_buffers,
+            ),
+            reported_at,
+        )
         self._flush_status()
 
     def run_forever(self) -> None:
