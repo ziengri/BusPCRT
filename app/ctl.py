@@ -269,8 +269,27 @@ def unit_exists(unit: str) -> bool:
     return False
 
 
+def _unit_installed_from_show(unit: str, parsed: dict[str, str]) -> bool:
+    load_state = (parsed.get("LoadState") or "").strip()
+    if load_state and load_state != "not-found":
+        return True
+
+    if unit_exists(unit):
+        return True
+
+    if "@" not in unit:
+        return False
+
+    prefix, suffix = unit.split("@", 1)
+    if "." not in suffix:
+        return False
+
+    _instance_name, unit_suffix = suffix.split(".", 1)
+    template_unit = f"{prefix}@.{unit_suffix}"
+    return unit_exists(template_unit)
+
+
 def unit_status(alias: str | None, unit: str) -> UnitStatus:
-    installed = unit_exists(unit)
     proc = subprocess.run(
         [
             "systemctl",
@@ -283,12 +302,13 @@ def unit_status(alias: str | None, unit: str) -> UnitStatus:
         text=True,
     )
     parsed = parse_systemctl_show(proc.stdout)
+    installed = _unit_installed_from_show(unit, parsed)
     active_state = parsed.get("ActiveState")
     return UnitStatus(
         alias=alias,
         unit=unit,
         installed=installed,
-        active=installed and active_state == "active",
+        active=active_state == "active",
         description=parsed.get("Description"),
         load_state=parsed.get("LoadState"),
         active_state=active_state,

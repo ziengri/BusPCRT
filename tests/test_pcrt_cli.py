@@ -114,6 +114,37 @@ def test_run_logs_for_cams_builds_multi_unit_journalctl(monkeypatch) -> None:
     assert "buspcrt-recorder@cam3.service" in calls[0]
 
 
+def test_unit_status_marks_instance_unit_installed_and_active(monkeypatch) -> None:
+    calls = []
+
+    def fake_run(cmd, check=False, capture_output=False, text=False, **kwargs):
+        calls.append(cmd)
+        if cmd[:2] == ["systemctl", "show"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=(
+                    "LoadState=loaded\n"
+                    "ActiveState=active\n"
+                    "SubState=running\n"
+                    "Result=success\n"
+                    "ExecMainStatus=0\n"
+                ),
+            )
+        if cmd[:3] == ["systemctl", "list-unit-files", "buspcrt-recorder@cam1.service"]:
+            return SimpleNamespace(returncode=0, stdout="")
+        if cmd[:3] == ["systemctl", "list-unit-files", "buspcrt-recorder@.service"]:
+            return SimpleNamespace(returncode=0, stdout="buspcrt-recorder@.service enabled\n")
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    monkeypatch.setattr(ctl.subprocess, "run", fake_run)
+
+    status = ctl.unit_status("cam1", "buspcrt-recorder@cam1.service")
+
+    assert status.installed is True
+    assert status.active is True
+    assert calls[0][:2] == ["systemctl", "show"]
+
+
 def test_run_doors_live_stops_and_restores_service(monkeypatch, tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     simulator = runtime.project_root / "scripts" / "door_zmq_terminal_sim.py"
