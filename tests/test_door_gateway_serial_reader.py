@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from door_gateway.protocol import build_packet
 from door_gateway.serial_reader import extract_packets
 
 
@@ -31,4 +32,14 @@ def test_extract_packets_multiple_and_tail() -> None:
     buffer = bytearray(p1 + p2 + b"!DO")
     packets = extract_packets(buffer)
     assert packets == [p1, p2]
+    assert buffer == bytearray(b"!DO")
+
+
+def test_extract_packets_for_four_doors() -> None:
+    packet = build_packet({1: 0, 2: 1, 3: 0, 4: 1}, door_count=4)
+    buffer = bytearray(packet + b"!DO")
+
+    packets = extract_packets(buffer, door_count=4)
+
+    assert packets == [packet]
     assert buffer == bytearray(b"!DO")

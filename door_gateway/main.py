@@ -42,6 +42,8 @@ def _open_serial(cfg: GatewayConfig, port: str) -> serial.Serial:
 
 def _probe_port_for_protocol(
     ser: serial.Serial,
+    *,
+    door_count: int,
     probe_timeout_sec: float = 1.5,
 ) -> tuple[bool, dict[int, int] | None]:
     buffer = bytearray()
@@ -51,10 +53,10 @@ def _probe_port_for_protocol(
         if not chunk:
             continue
         buffer.extend(chunk)
-        packets = extract_packets(buffer)
+        packets = extract_packets(buffer, door_count=door_count)
         for packet in packets:
             try:
-                doors = parse_packet(packet)
+                doors = parse_packet(packet, door_count=door_count)
             except ValueError:
                 continue
             return True, doors
@@ -87,7 +89,7 @@ def _select_serial_port(cfg: GatewayConfig, logger: logging.Logger) -> tuple[ser
             continue
 
         try:
-            ok, doors = _probe_port_for_protocol(ser)
+            ok, doors = _probe_port_for_protocol(ser, door_count=cfg.door_count)
             if ok:
                 logger.info("Serial probe matched door protocol on port: %s", port)
                 return ser, port, doors
@@ -114,14 +116,14 @@ def main() -> int:
     )
 
     try:
-        publisher = DoorPublisher(cfg.ipc_endpoint)
+        publisher = DoorPublisher(cfg.ipc_endpoint, door_count=cfg.door_count)
     except Exception as exc:  # noqa: BLE001
         logger.error("Failed to bind ZeroMQ PUB endpoint %s: %s", cfg.ipc_endpoint, exc)
         return 2
 
     logger.info("ZeroMQ PUB bound on %s", cfg.ipc_endpoint)
 
-    store = DoorStateStore()
+    store = DoorStateStore(cfg.door_count)
     publisher.publish_snapshot(store.snapshot(time.time()))
     last_heartbeat_ts = time.time()
     stale_logged = True
@@ -180,10 +182,10 @@ def main() -> int:
                     continue
 
                 buffer.extend(chunk)
-                packets = extract_packets(buffer)
+                packets = extract_packets(buffer, door_count=cfg.door_count)
                 for packet in packets:
                     try:
-                        doors = parse_packet(packet)
+                        doors = parse_packet(packet, door_count=cfg.door_count)
                     except ValueError as exc:
                         logger.warning("Invalid packet (%s): %s", _packet_hex(packet), exc)
                         continue

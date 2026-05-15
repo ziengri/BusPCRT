@@ -16,6 +16,7 @@ from dotenv import dotenv_values
 
 from app.monitor.outbox import MonitorOutbox
 from app.monitor.probes import parse_systemctl_show
+from app.shared import RecorderConfig, discover_recorder_configs, parse_number_cams
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEVICE_ENV_PATH = Path("/etc/pcrt/device.env")
@@ -23,7 +24,7 @@ CONFIG_ENV_PATH = PROJECT_ROOT / "config.env"
 MONITOR_ENV_PATH = PROJECT_ROOT / "monitor.env"
 DEFAULT_MONITOR_DB_PATH = Path("/var/lib/pcrt/monitor.sqlite")
 DEFAULT_MANUAL_CAPTURES_DIR = Path("/var/lib/pcrt/manual-captures")
-CORE_SERVICE_ALIASES = ("processor", "monitor", "door", "cam1", "cam2", "cam3", "updater-timer")
+DOOR_GATEWAY_ENV_PATH = PROJECT_ROOT / "door_gateway.env"
 UNIT_SHOW_PROPERTIES = (
     "Description",
     "LoadState",
@@ -34,25 +35,16 @@ UNIT_SHOW_PROPERTIES = (
     "ExecMainStatus",
     "ActiveEnterTimestamp",
 )
-SERVICE_TARGETS: dict[str, str] = {
+FIXED_SERVICE_TARGETS: dict[str, str] = {
     "processor": "buspcrt-processor.service",
     "monitor": "buspcrt-monitor.service",
     "door": "buspcrt-door-gateway.service",
-    "cam1": "buspcrt-recorder@cam1.service",
-    "cam2": "buspcrt-recorder@cam2.service",
-    "cam3": "buspcrt-recorder@cam3.service",
     "updater": "buspcrt-updater.service",
     "updater-timer": "buspcrt-updater.timer",
     "cleanup": "buspcrt-sessions-cleanup.service",
 }
-GROUP_TARGETS: dict[str, tuple[str, ...]] = {
-    "cams": ("cam1", "cam2", "cam3"),
-}
-RECORDER_ENV_BY_ALIAS = {
-    "cam1": "recorder-cam.env",
-    "cam2": "recorder-cam2.env",
-    "cam3": "recorder-cam3.env",
-}
+FIXED_CORE_SERVICE_ALIASES = ("processor", "monitor", "door", "updater-timer")
+CAMERA_GROUP_ALIAS = "cams"
 
 
 class CtlError(RuntimeError):
@@ -65,10 +57,14 @@ class RuntimeConfig:
     config_env_path: Path
     device_env_path: Path
     monitor_env_path: Path
+    door_gateway_env_path: Path
     bus_id: str | None
     monitor_interval_sec: float
     monitor_db_path: Path
     zmq_ipc_endpoint: str
+    number_cams: int | None
+    door_count: int
+    recorder_configs: tuple[RecorderConfig, ...]
 
 
 @dataclass
@@ -128,10 +124,12 @@ def load_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
     project_root = config_env_path.parent
     monitor_env_path = Path(args.monitor_env_file).resolve()
     device_env_path = Path(args.device_env_file).resolve()
+    door_gateway_env_path = (project_root / "door_gateway.env").resolve()
 
     config_raw = _load_env_file(config_env_path)
     monitor_raw = _load_env_file(monitor_env_path)
     device_raw = _load_env_file(device_env_path)
+    door_gateway_raw = _load_env_file(door_gateway_env_path)
 
     monitor_db_path = _resolve_path(
         monitor_raw.get("MONITOR_DB_PATH"),
@@ -143,16 +141,33 @@ def load_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         monitor_interval_sec = float(interval_raw)
     except ValueError:
         monitor_interval_sec = 30.0
+    try:
+        number_cams = parse_number_cams(device_raw.get("NUMBER_CAMS"))
+        recorder_configs = discover_recorder_configs(project_root, number_cams=number_cams)
+    except ValueError as exc:
+        raise CtlError(str(exc)) from exc
+
+    door_count_raw = door_gateway_raw.get("DOOR_COUNT") or number_cams or "3"
+    try:
+        door_count = int(door_count_raw)
+    except ValueError as exc:
+        raise CtlError(f"Invalid DOOR_COUNT in {door_gateway_env_path}: {door_count_raw}") from exc
+    if door_count not in (3, 4):
+        raise CtlError(f"Unsupported DOOR_COUNT in {door_gateway_env_path}: {door_count}")
 
     return RuntimeConfig(
         project_root=project_root,
         config_env_path=config_env_path,
         device_env_path=device_env_path,
         monitor_env_path=monitor_env_path,
+        door_gateway_env_path=door_gateway_env_path,
         bus_id=device_raw.get("BUS_ID"),
         monitor_interval_sec=monitor_interval_sec,
         monitor_db_path=monitor_db_path,
         zmq_ipc_endpoint=config_raw.get("ZMQ_IPC_ENDPOINT", "ipc:///run/doors.sock"),
+        number_cams=number_cams,
+        door_count=door_count,
+        recorder_configs=recorder_configs,
     )
 
 
@@ -207,7 +222,7 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict[str, argparse.Argument
         help="Manual camera recording",
         description="Manual camera recording",
     )
-    record.add_argument("camera", choices=("cam1", "cam2", "cam3"))
+    record.add_argument("camera")
     record.add_argument("--duration", type=float, default=None)
     record.add_argument("--output-dir", default=None)
     command_parsers["record"] = record
@@ -223,26 +238,56 @@ def print_json(data: Any) -> None:
     print(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True))
 
 
-def _normalize_unit_name(unit_or_alias: str) -> str:
-    return SERVICE_TARGETS.get(unit_or_alias, unit_or_alias)
+def _camera_aliases(runtime: RuntimeConfig) -> tuple[str, ...]:
+    return tuple(config.camera_id for config in runtime.recorder_configs)
 
 
-def resolve_units(targets: Sequence[str], *, allow_groups: bool) -> list[tuple[str | None, str]]:
+def _service_targets(runtime: RuntimeConfig) -> dict[str, str]:
+    targets = dict(FIXED_SERVICE_TARGETS)
+    for config in runtime.recorder_configs:
+        targets[config.camera_id] = config.unit_name
+    return targets
+
+
+def _core_service_aliases(runtime: RuntimeConfig) -> tuple[str, ...]:
+    return (
+        FIXED_CORE_SERVICE_ALIASES[0],
+        FIXED_CORE_SERVICE_ALIASES[1],
+        FIXED_CORE_SERVICE_ALIASES[2],
+        *_camera_aliases(runtime),
+        FIXED_CORE_SERVICE_ALIASES[3],
+    )
+
+
+def _group_targets(runtime: RuntimeConfig) -> dict[str, tuple[str, ...]]:
+    camera_aliases = _camera_aliases(runtime)
+    if not camera_aliases:
+        return {}
+    return {CAMERA_GROUP_ALIAS: camera_aliases}
+
+
+def _recorder_env_by_alias(runtime: RuntimeConfig) -> dict[str, Path]:
+    return {config.camera_id: config.env_path for config in runtime.recorder_configs}
+
+
+def resolve_units(runtime: RuntimeConfig, targets: Sequence[str], *, allow_groups: bool) -> list[tuple[str | None, str]]:
+    service_targets = _service_targets(runtime)
+    group_targets = _group_targets(runtime)
     resolved: list[tuple[str | None, str]] = []
     seen_units: set[str] = set()
     for target in targets:
-        if target in GROUP_TARGETS:
+        if target in group_targets:
             if not allow_groups:
                 raise CtlError(f"Target '{target}' is read-only and cannot be used here.")
-            for alias in GROUP_TARGETS[target]:
-                unit = SERVICE_TARGETS[alias]
+            for alias in group_targets[target]:
+                unit = service_targets[alias]
                 if unit not in seen_units:
                     resolved.append((alias, unit))
                     seen_units.add(unit)
             continue
 
-        unit = _normalize_unit_name(target)
-        alias = next((key for key, value in SERVICE_TARGETS.items() if value == unit), None)
+        unit = service_targets.get(target, target)
+        alias = next((key for key, value in service_targets.items() if value == unit), None)
         if alias is None and not unit.endswith(".service") and not unit.endswith(".timer"):
             raise CtlError(f"Unknown target: {target}")
         if unit not in seen_units:
@@ -375,8 +420,13 @@ def _read_monitor_snapshot(runtime: RuntimeConfig) -> tuple[dict[str, Any] | Non
     return snapshot, _snapshot_stale(snapshot.get("reportedAt"), runtime.monitor_interval_sec)
 
 
-def _health_verdict(statuses: dict[str, UnitStatus], snapshot: dict[str, Any] | None, stale: bool | None) -> str:
-    for alias in CORE_SERVICE_ALIASES:
+def _health_verdict(
+    runtime: RuntimeConfig,
+    statuses: dict[str, UnitStatus],
+    snapshot: dict[str, Any] | None,
+    stale: bool | None,
+) -> str:
+    for alias in _core_service_aliases(runtime):
         status = statuses[alias]
         if not status.installed or not status.active:
             return "error"
@@ -398,18 +448,20 @@ def _health_verdict(statuses: dict[str, UnitStatus], snapshot: dict[str, Any] | 
 
 
 def build_summary(runtime: RuntimeConfig) -> dict[str, Any]:
+    service_targets = _service_targets(runtime)
     service_statuses = {
         alias: unit_status(alias, unit)
-        for alias, unit in SERVICE_TARGETS.items()
+        for alias, unit in service_targets.items()
     }
     snapshot, stale = _read_monitor_snapshot(runtime)
-    verdict = _health_verdict(service_statuses, snapshot, stale)
+    verdict = _health_verdict(runtime, service_statuses, snapshot, stale)
     return {
         "busId": runtime.bus_id,
         "health": verdict,
         "monitorSnapshot": snapshot,
         "monitorSnapshotStale": stale,
         "services": {alias: status.to_dict() for alias, status in service_statuses.items()},
+        "coreServiceAliases": list(_core_service_aliases(runtime)),
     }
 
 
@@ -422,7 +474,7 @@ def render_summary(summary: dict[str, Any]) -> None:
 
     print("")
     print("Core services:")
-    for alias in CORE_SERVICE_ALIASES:
+    for alias in summary.get("coreServiceAliases", []):
         item = summary["services"][alias]
         status_text = "active" if item["active"] else (item.get("activeState") or "unknown")
         installed = "installed" if item["installed"] else "missing"
@@ -462,9 +514,11 @@ def render_summary(summary: dict[str, Any]) -> None:
         )
 
 
-def build_list_payload() -> list[dict[str, Any]]:
+def build_list_payload(runtime: RuntimeConfig) -> list[dict[str, Any]]:
+    service_targets = _service_targets(runtime)
+    group_targets = _group_targets(runtime)
     rows: list[dict[str, Any]] = []
-    for alias, unit in SERVICE_TARGETS.items():
+    for alias, unit in service_targets.items():
         status = unit_status(alias, unit)
         rows.append(
             {
@@ -476,8 +530,8 @@ def build_list_payload() -> list[dict[str, Any]]:
             }
         )
 
-    for alias, targets in GROUP_TARGETS.items():
-        target_statuses = [unit_status(target_alias, SERVICE_TARGETS[target_alias]) for target_alias in targets]
+    for alias, targets in group_targets.items():
+        target_statuses = [unit_status(target_alias, service_targets[target_alias]) for target_alias in targets]
         rows.append(
             {
                 "alias": alias,
@@ -486,7 +540,7 @@ def build_list_payload() -> list[dict[str, Any]]:
                 "installedCount": sum(1 for status in target_statuses if status.installed),
                 "activeCount": sum(1 for status in target_statuses if status.active),
             }
-        )
+            )
     return rows
 
 
@@ -506,8 +560,8 @@ def render_list(rows: list[dict[str, Any]]) -> None:
             )
 
 
-def build_status_payload(targets: Sequence[str]) -> list[dict[str, Any]]:
-    return [unit_status(alias, unit).to_dict() for alias, unit in resolve_units(targets, allow_groups=True)]
+def build_status_payload(runtime: RuntimeConfig, targets: Sequence[str]) -> list[dict[str, Any]]:
+    return [unit_status(alias, unit).to_dict() for alias, unit in resolve_units(runtime, targets, allow_groups=True)]
 
 
 def render_status(rows: list[dict[str, Any]]) -> None:
@@ -523,8 +577,8 @@ def render_status(rows: list[dict[str, Any]]) -> None:
         print(f"  result: {row.get('result')}")
 
 
-def run_logs(target: str, *, lines: int, follow: bool) -> int:
-    resolved = resolve_units([target], allow_groups=True)
+def run_logs(runtime: RuntimeConfig, target: str, *, lines: int, follow: bool) -> int:
+    resolved = resolve_units(runtime, [target], allow_groups=True)
     units = [unit for _alias, unit in resolved]
     cmd = ["journalctl"]
     for unit in units:
@@ -562,8 +616,19 @@ def maybe_stopped_unit(unit: str, *, action_label: str):
 
 
 def _resolve_recorder_env_path(runtime: RuntimeConfig, camera_alias: str) -> Path:
-    env_name = RECORDER_ENV_BY_ALIAS[camera_alias]
-    return runtime.project_root / env_name
+    env_by_alias = _recorder_env_by_alias(runtime)
+    env_path = env_by_alias.get(camera_alias)
+    if env_path is None:
+        if runtime.number_cams is not None:
+            try:
+                requested_number = int(camera_alias[3:] if camera_alias.startswith("cam") else camera_alias)
+            except ValueError:
+                requested_number = None
+            if requested_number is not None and requested_number > runtime.number_cams:
+                raise CtlError(f"Camera {camera_alias} is not active for NUMBER_CAMS={runtime.number_cams}")
+        available = ", ".join(sorted(env_by_alias)) or "none"
+        raise CtlError(f"Unknown recorder camera alias: {camera_alias}. Available cameras: {available}")
+    return env_path
 
 
 def _resolve_output_dir(camera_alias: str, output_dir: str | None) -> Path:
@@ -658,7 +723,7 @@ def run_record(runtime: RuntimeConfig, camera_alias: str, duration: float | None
     env_path = _resolve_recorder_env_path(runtime, camera_alias)
     if not env_path.exists():
         raise CtlError(f"Recorder env not found for {camera_alias}: {env_path}")
-    unit = SERVICE_TARGETS[camera_alias]
+    unit = _service_targets(runtime)[camera_alias]
     target_output_dir = _resolve_output_dir(camera_alias, output_dir)
     with maybe_stopped_unit(unit, action_label=f"record {camera_alias}"):
         return _manual_capture(camera_alias, env_path, target_output_dir, duration)
@@ -670,9 +735,16 @@ def run_doors_live(runtime: RuntimeConfig, endpoint_override: str | None = None)
     if not simulator.exists():
         raise CtlError(f"Door simulator not found: {simulator}")
 
-    with maybe_stopped_unit(SERVICE_TARGETS["door"], action_label="doors live"):
+    with maybe_stopped_unit(FIXED_SERVICE_TARGETS["door"], action_label="doors live"):
         proc = subprocess.run(
-            [sys.executable, str(simulator), "--endpoint", endpoint],
+            [
+                sys.executable,
+                str(simulator),
+                "--endpoint",
+                endpoint,
+                "--door-count",
+                str(runtime.door_count),
+            ],
             cwd=runtime.project_root,
             check=False,
         )
@@ -703,7 +775,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         if args.command == "list":
-            payload = build_list_payload()
+            payload = build_list_payload(runtime)
             if args.as_json:
                 print_json(payload)
             else:
@@ -711,7 +783,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         if args.command == "status":
-            payload = build_status_payload(args.targets)
+            payload = build_status_payload(runtime, args.targets)
             if args.as_json:
                 print_json(payload)
             else:
@@ -719,10 +791,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         if args.command == "logs":
-            return run_logs(args.target, lines=args.n, follow=args.follow)
+            return run_logs(runtime, args.target, lines=args.n, follow=args.follow)
 
         if args.command in {"start", "stop", "restart"}:
-            resolved = resolve_units(args.targets, allow_groups=False)
+            resolved = resolve_units(runtime, args.targets, allow_groups=False)
             run_systemctl_action(args.command, [unit for _alias, unit in resolved])
             return 0
 

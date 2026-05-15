@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .protocol import configured_door_ids
 
-@dataclass(slots=True)
+
+@dataclass
 class Snapshot:
     seq: int
     ts: float
@@ -14,8 +16,9 @@ class Snapshot:
 
 
 class DoorStateStore:
-    def __init__(self) -> None:
-        self.last_doors_state: dict[int, int] = {1: 0, 2: 0, 3: 0}
+    def __init__(self, door_count: int = 3) -> None:
+        self.door_ids = configured_door_ids(door_count)
+        self.last_doors_state: dict[int, int] = {door_id: 0 for door_id in self.door_ids}
         self.last_packet_ts: float | None = None
         self.seq: int = 0
         self.stale: bool = True
@@ -38,7 +41,7 @@ class DoorStateStore:
         )
 
     def update_from_doors(self, doors: dict[int, int], ts: float) -> Snapshot:
-        self.last_doors_state = {1: int(doors[1]), 2: int(doors[2]), 3: int(doors[3])}
+        self.last_doors_state = {door_id: int(doors[door_id]) for door_id in self.door_ids}
         self.last_packet_ts = ts
         self.stale = False
         self.seq += 1

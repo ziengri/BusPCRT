@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-@dataclass(slots=True)
+@dataclass
 class CountResult:
     total_in: int
     total_out: int
@@ -12,7 +12,7 @@ class CountResult:
     debug_video_path: Path | None = None
 
 
-@dataclass(slots=True)
+@dataclass
 class ProcessedResult:
     date: str
     id: str

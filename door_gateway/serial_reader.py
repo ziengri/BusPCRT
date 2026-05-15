@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from .protocol import HEADER, PACKET_LEN
+from .protocol import HEADER, packet_length
 
 
-def extract_packets(buffer: bytearray) -> list[bytes]:
+def extract_packets(buffer: bytearray, *, door_count: int = 3) -> list[bytes]:
     """
     Extract fixed-size packets from a streaming byte buffer.
 
@@ -11,6 +11,7 @@ def extract_packets(buffer: bytearray) -> list[bytes]:
     """
     packets: list[bytes] = []
     header_len = len(HEADER)
+    expected_len = packet_length(door_count)
 
     while True:
         idx = buffer.find(HEADER)
@@ -23,11 +24,11 @@ def extract_packets(buffer: bytearray) -> list[bytes]:
         if idx > 0:
             del buffer[:idx]
 
-        if len(buffer) < PACKET_LEN:
+        if len(buffer) < expected_len:
             break
 
-        packet = bytes(buffer[:PACKET_LEN])
-        del buffer[:PACKET_LEN]
+        packet = bytes(buffer[:expected_len])
+        del buffer[:expected_len]
         packets.append(packet)
 
     return packets

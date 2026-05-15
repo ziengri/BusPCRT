@@ -6,6 +6,8 @@
 
 `pcrt` is the main service command for working with the onboard system from the terminal.
 
+Recorder cameras use shared fleet configs from `recorder-cam*.env`. The active camera set on each bus is selected by `/etc/pcrt/device.env::NUMBER_CAMS`.
+
 It can:
 
 - show the current board summary
@@ -17,12 +19,12 @@ It can:
 
 ### Install `pcrt` Into PATH
 
-If the project is installed on the bus in `/opt/BusPCRT`, run:
+If the project is installed on the bus in `/opt/pcrt`, run:
 
 ```bash
-sudo /opt/BusPCRT/scripts/services/pcrt_cli.sh install \
-  --project-root /opt/BusPCRT \
-  --python /opt/BusPCRT/.venv/bin/python
+sudo /opt/pcrt/scripts/services/pcrt_cli.sh install \
+  --project-root /opt/pcrt \
+  --python /opt/pcrt/.venv/bin/python
 ```
 
 After that:
@@ -35,8 +37,18 @@ pcrt help
 If needed, remove it with:
 
 ```bash
-sudo /opt/BusPCRT/scripts/services/pcrt_cli.sh uninstall
+sudo /opt/pcrt/scripts/services/pcrt_cli.sh uninstall
 ```
+
+### Install Or Reinstall Services
+
+To reinstall all BusPCRT services consistently from the current `/etc/pcrt/device.env`:
+
+```bash
+sudo /opt/pcrt/scripts/services/install_services.sh
+```
+
+The script removes old systemd units first, then installs fixed services and only active recorder services. For example, with `NUMBER_CAMS=3`, an old `buspcrt-recorder@cam4.service` is removed and not re-enabled.
 
 ### Help
 
@@ -89,6 +101,7 @@ Show service status by alias or full unit name:
 pcrt status processor
 pcrt status monitor door
 pcrt status cam1
+pcrt status cam4
 pcrt status buspcrt-monitor.service
 ```
 
@@ -114,7 +127,7 @@ pcrt logs monitor
 pcrt logs cam1
 ```
 
-Show logs from all three camera recorder services:
+Show logs from all discovered camera recorder services:
 
 ```bash
 pcrt logs cams
@@ -140,6 +153,7 @@ These commands require `root` or `sudo`.
 ```bash
 sudo pcrt restart processor
 sudo pcrt restart cam1
+sudo pcrt restart cam4
 sudo pcrt stop monitor
 sudo pcrt start monitor
 ```
@@ -157,6 +171,7 @@ sudo pcrt doors live
 This temporarily stops `buspcrt-door-gateway.service` if it is active, starts the simulator, and restores the real service when you exit.
 
 The simulator uses the current `ZMQ_IPC_ENDPOINT` from `config.env` by default.
+The door count comes from `/etc/pcrt/device.env::NUMBER_CAMS`. `door_gateway.env::DOOR_COUNT` is only an optional manual override for debugging.
 
 ### Manual Camera Recording
 
@@ -175,7 +190,7 @@ sudo pcrt record cam2 --duration 15
 With custom output directory:
 
 ```bash
-sudo pcrt record cam3 --duration 20 --output-dir /tmp/pcrt-captures/cam3
+sudo pcrt record cam4 --duration 20 --output-dir /tmp/pcrt-captures/cam4
 ```
 
 Behavior:
@@ -192,12 +207,16 @@ Service aliases:
 - `processor`
 - `monitor`
 - `door`
-- `cam1`
-- `cam2`
-- `cam3`
 - `updater`
 - `updater-timer`
 - `cleanup`
+
+Camera aliases are generated dynamically from `CAMERA_ID` values in `recorder-cam*.env`, filtered by `/etc/pcrt/device.env::NUMBER_CAMS`, for example:
+
+- `cam1`
+- `cam2`
+- `cam3`
+- `cam4`
 
 Read-only group alias:
 
@@ -212,10 +231,29 @@ Read-only group alias:
 
 `pcrt` reads configuration from:
 
-- `/etc/pcrt/device.env`
+- `/etc/pcrt/device.env` (`BUS_ID`, `SSH_PORT`, `NUMBER_CAMS=3|4`)
 - `config.env`
 - `monitor.env`
+- `door_gateway.env`
 - local `monitor.sqlite`
-- `recorder-cam.env`
-- `recorder-cam2.env`
-- `recorder-cam3.env`
+- fleet `recorder-cam*.env`
+
+## Camera And Door Expansion
+
+`recorder-cam*.env` files are fleet configs and may be filled identically on every onboard PC. The per-bus switch is `NUMBER_CAMS` in `/etc/pcrt/device.env`.
+
+For a 3-camera / 3-door bus:
+
+```dotenv
+NUMBER_CAMS=3
+```
+
+For a 4-camera / 4-door bus:
+
+```dotenv
+NUMBER_CAMS=4
+```
+
+When `NUMBER_CAMS=3`, `recorder-cam4.env` is ignored even if it is filled. When `NUMBER_CAMS=4`, `cam4` becomes active for `pcrt`, monitoring, recorder service installation, and the door protocol publishes `door.4.state`.
+
+During firstboot, `setup_firstboot.sh` writes `/etc/pcrt/device.env`, reinstalls `reverse-tunnel.service`, and then runs `/opt/pcrt/scripts/services/install_services.sh` so systemd matches the selected bus configuration.

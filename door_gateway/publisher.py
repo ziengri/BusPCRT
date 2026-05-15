@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterable
 from pathlib import Path
 
 import zmq
 
+from .protocol import configured_door_ids
 from .state import Snapshot
 
 
@@ -16,8 +18,9 @@ def _ipc_path_from_endpoint(endpoint: str) -> Path | None:
 
 
 class DoorPublisher:
-    def __init__(self, endpoint: str):
+    def __init__(self, endpoint: str, *, door_count: int = 3, door_ids: Iterable[int] | None = None):
         self.endpoint = endpoint
+        self.door_ids = tuple(door_ids) if door_ids is not None else configured_door_ids(door_count)
         self.context = zmq.Context.instance()
         self.socket = self.context.socket(zmq.PUB)
         self.socket.setsockopt(zmq.LINGER, 0)
@@ -49,14 +52,14 @@ class DoorPublisher:
         doors_payload = {
             "seq": seq,
             "ts": ts,
-            "doors": {"1": snap.doors[1], "2": snap.doors[2], "3": snap.doors[3]},
+            "doors": {str(door_id): snap.doors[door_id] for door_id in self.door_ids},
             "any_open": snap.any_open,
             "all_closed": snap.all_closed,
             "stale": snap.stale,
         }
         self._send("doors.state", doors_payload)
 
-        for door_id in (1, 2, 3):
+        for door_id in self.door_ids:
             self._send(
                 f"door.{door_id}.state",
                 {

@@ -2,17 +2,20 @@
 set -Eeuo pipefail
 
 BASE_DIR="/root/firstboot"
+PROJECT_ROOT="/opt/pcrt"
 
 DEVICE_TEMPLATE="${BASE_DIR}/device.env"
 DEVICE_TARGET="/etc/pcrt/device.env"
+INSTALL_SERVICES_SCRIPT="${PROJECT_ROOT}/scripts/services/install_services.sh"
 
 REVERSE_TEMPLATE=""
 REVERSE_TARGET="/etc/systemd/system/reverse-tunnel.service"
 
 TUNNEL_KEY="/root/.ssh/id_ed25519_vps_tunnel"
-TUNNEL_REMOTE="tunnel@89.124.69.165"
+TUNNEL_REMOTE="tunnel@176.57.213.35"
 
 BUS_ID=""
+NUMBER_CAMS=""
 REVERSE_PORT=""
 HOSTNAME_VALUE=""
 
@@ -141,9 +144,25 @@ ask_bus_id() {
   done
 }
 
+ask_number_cams() {
+  local raw
+
+  while true; do
+    read -r -p "Enter number of cameras (3 or 4): " raw
+
+    if [[ "$raw" =~ ^(3|4)$ ]]; then
+      NUMBER_CAMS="$raw"
+      return 0
+    fi
+
+    log_warn "Invalid camera count. Use 3 or 4."
+  done
+}
+
 confirm_apply() {
   echo
   echo "Bus ID      : ${BUS_ID}"
+  echo "Number cams : ${NUMBER_CAMS}"
   echo "Reverse port: ${REVERSE_PORT}"
   echo "Hostname    : ${HOSTNAME_VALUE}"
   echo
@@ -185,6 +204,7 @@ render_device_env() {
     -e "s/__BUS_ID__/$(escape_sed_replacement "$BUS_ID")/g" \
     -e "s/__REVERSE_PORT__/$(escape_sed_replacement "$REVERSE_PORT")/g" \
     -e "s/__HOSTNAME__/$(escape_sed_replacement "$HOSTNAME_VALUE")/g" \
+    -e "s/__NUMBER_CAMS__/$(escape_sed_replacement "$NUMBER_CAMS")/g" \
     "$DEVICE_TEMPLATE" >"$tmp"
 
   mkdir -p "$(dirname "$DEVICE_TARGET")"
@@ -233,6 +253,22 @@ install_reverse_tunnel_service() {
   fi
 }
 
+install_buspcrt_services() {
+  log_info "Reinstalling BusPCRT services for NUMBER_CAMS=${NUMBER_CAMS}"
+
+  if ! "$INSTALL_SERVICES_SCRIPT"; then
+    log_error "BusPCRT service reinstall failed"
+    systemctl status buspcrt-processor.service --no-pager || true
+    systemctl status buspcrt-monitor.service --no-pager || true
+    systemctl status buspcrt-door-gateway.service --no-pager || true
+    systemctl status buspcrt-updater.timer --no-pager || true
+    journalctl -u buspcrt-monitor.service -n 100 --no-pager || true
+    exit 1
+  fi
+
+  log_info "BusPCRT services reinstalled for NUMBER_CAMS=${NUMBER_CAMS}"
+}
+
 main() {
   require_root
 
@@ -246,9 +282,11 @@ main() {
   require_file "$DEVICE_TEMPLATE"
   resolve_reverse_template
   require_file "$REVERSE_TEMPLATE"
+  require_file "$INSTALL_SERVICES_SCRIPT"
   [[ -f "$TUNNEL_KEY" ]] || die "Tunnel SSH key not found: $TUNNEL_KEY"
 
   ask_bus_id
+  ask_number_cams
   confirm_apply
 
   cleanup_unique_system_data
@@ -256,14 +294,18 @@ main() {
   update_hostname
   render_device_env
   install_reverse_tunnel_service
+  install_buspcrt_services
 
   echo
   log_info "Done."
   echo "BUS_ID=${BUS_ID}"
+  echo "NUMBER_CAMS=${NUMBER_CAMS}"
   echo "REVERSE_PORT=${REVERSE_PORT}"
   echo "HOSTNAME=${HOSTNAME_VALUE}"
   echo "DEVICE_ENV=${DEVICE_TARGET}"
   echo "SERVICE=${REVERSE_TARGET}"
+  echo "PROJECT_ROOT=${PROJECT_ROOT}"
+  echo "BUSPCRT_SERVICES=reinstalled"
 }
 
 main "$@"

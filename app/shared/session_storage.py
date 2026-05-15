@@ -8,7 +8,7 @@ from video_session import SessionMeta
 from video_session.utils import resolve_video_path
 
 
-@dataclass(slots=True)
+@dataclass
 class SessionDirs:
     root: Path
     active: Path

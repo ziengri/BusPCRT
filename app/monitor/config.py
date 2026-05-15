@@ -1,33 +1,26 @@
 from __future__ import annotations
 
 import argparse
-import re
 from dataclasses import dataclass
 from pathlib import Path
-from urllib import parse
 
 from dotenv import dotenv_values
+
+from app.shared import camera_numeric_id, discover_recorder_configs, parse_number_cams
 
 from .models import CameraTarget
 
 DEFAULT_API_BASE_URL = "http://5.129.252.183:8000"
 DEFAULT_API_X_AUTH = "pcrt!af3g"
-DEFAULT_MONITOR_UNITS = (
+DEFAULT_FIXED_MONITOR_UNITS = (
     "buspcrt-processor.service",
-    "buspcrt-recorder@cam1.service",
-    "buspcrt-recorder@cam2.service",
-    "buspcrt-recorder@cam3.service",
     "buspcrt-door-gateway.service",
     "buspcrt-updater.timer",
     "buspcrt-updater.service",
 )
-DEFAULT_APP_ERROR_UNITS = (
+DEFAULT_FIXED_APP_ERROR_UNITS = (
     "buspcrt-processor.service",
-    "buspcrt-recorder@cam1.service",
-    "buspcrt-recorder@cam2.service",
-    "buspcrt-recorder@cam3.service",
 )
-RECORDER_ENV_FILENAMES = ("recorder-cam.env", "recorder-cam2.env", "recorder-cam3.env")
 
 
 @dataclass
@@ -82,6 +75,7 @@ def _env_defaults(
     device_raw = _load_env(device_env_file)
     return {
         "bus_id": device_raw.get("BUS_ID"),
+        "number_cams": device_raw.get("NUMBER_CAMS"),
         "api_base_url": raw.get("API_BASE_URL"),
         "api_x_auth": raw.get("API_X_AUTH"),
         "sessions_dir": raw.get("SESSIONS_DIR"),
@@ -94,9 +88,6 @@ def _env_defaults(
         "monitor_storage_warn_pct": raw.get("MONITOR_STORAGE_WARN_PCT"),
         "monitor_storage_crit_pct": raw.get("MONITOR_STORAGE_CRIT_PCT"),
         "monitor_journal_bootstrap_since": raw.get("MONITOR_JOURNAL_BOOTSTRAP_SINCE"),
-        "cam1_ip": raw.get("CAM1_IP"),
-        "cam2_ip": raw.get("CAM2_IP"),
-        "cam3_ip": raw.get("CAM3_IP"),
     }
 
 
@@ -107,52 +98,20 @@ def _resolve_path(value: str | None, base_dir: Path, default: str) -> Path:
     return (base_dir / path).resolve()
 
 
-def _extract_rtsp_host(source: str | None) -> str | None:
-    if not source:
-        return None
-    try:
-        parsed = parse.urlsplit(source)
-    except ValueError:
-        return None
-    return parsed.hostname
-
-
-def _camera_number(camera_id: str, fallback: int) -> int:
-    match = re.search(r"(\d+)", camera_id)
-    if match:
-        return int(match.group(1))
-    return int(fallback)
-
-
-def _load_camera_targets(project_root: Path, fallback_ips: dict[int, str], port: int = 554) -> tuple[CameraTarget, ...]:
+def _load_camera_targets(project_root: Path, *, number_cams: int | None = None, port: int = 554) -> tuple[CameraTarget, ...]:
+    recorder_configs = discover_recorder_configs(project_root, number_cams=number_cams)
     targets: list[CameraTarget] = []
-    for index, env_name in enumerate(RECORDER_ENV_FILENAMES, start=1):
-        env_path = project_root / env_name
-        raw = _load_env(str(env_path))
-        camera_name = str(raw.get("CAMERA_ID", f"cam{index}"))
-        source = str(raw.get("SOURCE")) if raw.get("SOURCE") else None
-        ip = _extract_rtsp_host(source) or fallback_ips.get(index)
-        if not ip:
-            continue
+    for index, recorder in enumerate(recorder_configs, start=1):
         targets.append(
             CameraTarget(
-                camera_id=_camera_number(camera_name, index),
-                name=camera_name,
-                ip=ip,
-                source=source,
+                camera_id=camera_numeric_id(recorder.camera_id, index),
+                name=recorder.camera_id,
+                ip=recorder.source_host,
+                source=recorder.source,
                 port=port,
             )
         )
-
-    if targets:
-        return tuple(sorted(targets, key=lambda item: item.camera_id))
-
-    generated = [
-        CameraTarget(camera_id=index, name=f"cam{index}", ip=ip, source=None, port=port)
-        for index, ip in sorted(fallback_ips.items())
-        if ip
-    ]
-    return tuple(generated)
+    return tuple(targets)
 
 
 def parse_monitor_args() -> MonitorConfig:
@@ -168,6 +127,7 @@ def parse_monitor_args() -> MonitorConfig:
     parser.add_argument("--device-env-file", default=pre_args.device_env_file)
     parser.add_argument("--env-file", default=pre_args.env_file)
     parser.add_argument("--bus-id", dest="bus_id", default=None)
+    parser.add_argument("--number-cams", dest="number_cams", type=int, default=None)
     parser.add_argument("--api-base-url", dest="api_base_url", default=DEFAULT_API_BASE_URL)
     parser.add_argument("--api-x-auth", dest="api_x_auth", default=DEFAULT_API_X_AUTH)
     parser.add_argument("--sessions-dir", dest="sessions_dir", default="sessions")
@@ -184,28 +144,35 @@ def parse_monitor_args() -> MonitorConfig:
         dest="monitor_journal_bootstrap_since",
         default="-5m",
     )
-    parser.add_argument("--cam1-ip", dest="cam1_ip", default="192.168.0.3")
-    parser.add_argument("--cam2-ip", dest="cam2_ip", default="192.168.0.4")
-    parser.add_argument("--cam3-ip", dest="cam3_ip", default="192.168.0.5")
     parser.set_defaults(**{key: value for key, value in env.items() if value not in (None, "")})
     args = parser.parse_args()
 
     if not args.bus_id:
         parser.error("--bus-id is required (set /etc/pcrt/device.env BUS_ID)")
+    try:
+        number_cams = parse_number_cams(args.number_cams)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     config_env_path = Path(args.config_env_file).resolve()
     project_root = config_env_path.parent
     sessions_dir = _resolve_path(str(args.sessions_dir), project_root, "sessions")
     timeline_outbox_db = _resolve_path(args.timeline_outbox_db, project_root, "sessions/outbox/timeline_outbox.sqlite")
     monitor_db_path = _resolve_path(args.monitor_db_path, project_root, "monitor.sqlite")
-    fallback_ips = {
-        1: str(args.cam1_ip).strip(),
-        2: str(args.cam2_ip).strip(),
-        3: str(args.cam3_ip).strip(),
-    }
-    camera_targets = _load_camera_targets(project_root, fallback_ips=fallback_ips)
+    try:
+        camera_targets = _load_camera_targets(project_root, number_cams=number_cams)
+    except ValueError as exc:
+        parser.error(str(exc))
     if not camera_targets:
-        parser.error("No camera targets could be resolved from recorder env files or fallback IPs")
+        parser.error("No active recorder camera configs found in recorder-cam*.env")
+
+    recorder_units = tuple(f"buspcrt-recorder@{target.name}.service" for target in camera_targets)
+    monitored_units = (
+        DEFAULT_FIXED_MONITOR_UNITS[0],
+        *recorder_units,
+        *DEFAULT_FIXED_MONITOR_UNITS[1:],
+    )
+    journal_units = (DEFAULT_FIXED_APP_ERROR_UNITS[0], *recorder_units)
 
     return MonitorConfig(
         bus_id=str(args.bus_id).strip(),
@@ -223,6 +190,6 @@ def parse_monitor_args() -> MonitorConfig:
         storage_crit_pct=float(args.monitor_storage_crit_pct),
         journal_bootstrap_since=str(args.monitor_journal_bootstrap_since),
         camera_targets=camera_targets,
-        monitored_units=DEFAULT_MONITOR_UNITS,
-        journal_units=DEFAULT_APP_ERROR_UNITS,
+        monitored_units=monitored_units,
+        journal_units=journal_units,
     )

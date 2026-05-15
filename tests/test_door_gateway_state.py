@@ -25,3 +25,13 @@ def test_stale_transition_and_recovery() -> None:
 
     snap = store.update_from_doors({1: 1, 2: 0, 3: 0}, ts=13.0)
     assert snap.stale is False
+
+
+def test_state_supports_four_doors() -> None:
+    store = DoorStateStore(door_count=4)
+
+    snap = store.update_from_doors({1: 0, 2: 0, 3: 0, 4: 1}, ts=42.0)
+
+    assert snap.doors[4] == 1
+    assert snap.any_open is True
+    assert snap.all_closed is False

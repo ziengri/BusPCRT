@@ -68,7 +68,7 @@ unit_exists() {
 discover_units() {
   local unit
 
-  for unit in buspcrt-door-gateway.service buspcrt-processor.service buspcrt-recorder@cam1.service buspcrt-recorder@cam2.service buspcrt-recorder@cam3.service; do
+  for unit in buspcrt-door-gateway.service buspcrt-processor.service buspcrt-monitor.service; do
     if unit_exists "$unit"; then
       echo "$unit"
     else
