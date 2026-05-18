@@ -26,6 +26,27 @@ def test_extract_packets_with_garbage_prefix() -> None:
     assert packets[0] == b"!DOORS:1=\x00;2=\x00;3=\x00;"
 
 
+def test_extract_packets_without_final_semicolon() -> None:
+    packet = b"!DOORS:1=\x00;2=\x01;3=\x00"
+    buffer = bytearray(packet)
+
+    packets = extract_packets(buffer)
+
+    assert packets == [packet]
+    assert buffer == bytearray()
+
+
+def test_extract_packets_without_final_semicolon_before_next_packet() -> None:
+    p1 = b"!DOORS:1=\x00;2=\x01;3=\x00"
+    p2 = b"!DOORS:1=\x01;2=\x00;3=\x01"
+    buffer = bytearray(p1 + p2)
+
+    packets = extract_packets(buffer)
+
+    assert packets == [p1, p2]
+    assert buffer == bytearray()
+
+
 def test_extract_packets_multiple_and_tail() -> None:
     p1 = b"!DOORS:1=\x00;2=\x00;3=\x00;"
     p2 = b"!DOORS:1=\x01;2=\x01;3=\x00;"
@@ -37,6 +58,16 @@ def test_extract_packets_multiple_and_tail() -> None:
 
 def test_extract_packets_for_four_doors() -> None:
     packet = build_packet({1: 0, 2: 1, 3: 0, 4: 1}, door_count=4)
+    buffer = bytearray(packet + b"!DO")
+
+    packets = extract_packets(buffer, door_count=4)
+
+    assert packets == [packet]
+    assert buffer == bytearray(b"!DO")
+
+
+def test_extract_packets_for_four_doors_without_final_semicolon() -> None:
+    packet = b"!DOORS:1=\x00;2=\x01;3=\x00;4=\x01"
     buffer = bytearray(packet + b"!DO")
 
     packets = extract_packets(buffer, door_count=4)

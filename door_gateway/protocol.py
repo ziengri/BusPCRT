@@ -21,6 +21,10 @@ def packet_length(door_count: int = 3) -> int:
     return len(HEADER) + (4 * validate_door_count(door_count))
 
 
+def packet_min_length(door_count: int = 3) -> int:
+    return packet_length(door_count) - 1
+
+
 def build_packet(doors: Mapping[int, int], *, door_count: int = 3) -> bytes:
     packet = bytearray(HEADER)
     for door_id in configured_door_ids(door_count):
@@ -36,7 +40,8 @@ def build_packet(doors: Mapping[int, int], *, door_count: int = 3) -> bytes:
 def parse_packet(packet: bytes, *, door_count: int = 3) -> dict[int, int]:
     """Parse one binary packet like b'!DOORS:1=\\x00;2=\\x01;3=\\x00;'."""
     expected_len = packet_length(door_count)
-    if len(packet) != expected_len:
+    min_len = packet_min_length(door_count)
+    if len(packet) not in (min_len, expected_len):
         raise ValueError(f"Invalid packet length: {len(packet)}")
     if packet[:7] != HEADER:
         raise ValueError("Invalid packet prefix")
@@ -52,7 +57,11 @@ def parse_packet(packet: bytes, *, door_count: int = 3) -> dict[int, int]:
         if state not in (0, 1):
             raise ValueError(f"Invalid door state bytes: door={door_id} state={state}")
         cursor += 1
-        if packet[cursor] != ord(";"):
+        is_last_door = door_id == door_count
+        if is_last_door and cursor == len(packet):
+            parsed[door_id] = state
+            continue
+        if cursor >= len(packet) or packet[cursor] != ord(";"):
             raise ValueError(f"Invalid packet structure at index {cursor}")
         cursor += 1
         parsed[door_id] = state

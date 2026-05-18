@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .protocol import HEADER, packet_length
+from .protocol import HEADER, packet_length, packet_min_length
 
 
 def extract_packets(buffer: bytearray, *, door_count: int = 3) -> list[bytes]:
@@ -12,6 +12,7 @@ def extract_packets(buffer: bytearray, *, door_count: int = 3) -> list[bytes]:
     packets: list[bytes] = []
     header_len = len(HEADER)
     expected_len = packet_length(door_count)
+    min_len = packet_min_length(door_count)
 
     while True:
         idx = buffer.find(HEADER)
@@ -24,11 +25,12 @@ def extract_packets(buffer: bytearray, *, door_count: int = 3) -> list[bytes]:
         if idx > 0:
             del buffer[:idx]
 
-        if len(buffer) < expected_len:
+        if len(buffer) < min_len:
             break
 
-        packet = bytes(buffer[:expected_len])
-        del buffer[:expected_len]
+        packet_len = expected_len if len(buffer) >= expected_len and buffer[expected_len - 1] == ord(";") else min_len
+        packet = bytes(buffer[:packet_len])
+        del buffer[:packet_len]
         packets.append(packet)
 
     return packets
