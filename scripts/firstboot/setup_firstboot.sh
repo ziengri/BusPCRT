@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-BASE_DIR="/root/firstboot"
 PROJECT_ROOT="/opt/pcrt"
+BASE_DIR="/opt/pcrt/scripts/firstboot"
 
 DEVICE_TEMPLATE="${BASE_DIR}/device.env"
 DEVICE_TARGET="/etc/pcrt/device.env"
