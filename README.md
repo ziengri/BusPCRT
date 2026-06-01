@@ -231,7 +231,7 @@ Read-only group alias:
 
 `pcrt` reads configuration from:
 
-- `/etc/pcrt/device.env` (`BUS_ID`, `SSH_PORT`, `NUMBER_CAMS=3|4`)
+- `/etc/pcrt/device.env` (`BUS_ID`, `NUMBER_CAMS=3|4`)
 - `config.env`
 - `monitor.env`
 - `door_gateway.env`
@@ -256,4 +256,4 @@ NUMBER_CAMS=4
 
 When `NUMBER_CAMS=3`, `recorder-cam4.env` is ignored even if it is filled. When `NUMBER_CAMS=4`, `cam4` becomes active for `pcrt`, monitoring, recorder service installation, and the door protocol publishes `door.4.state`.
 
-During firstboot, `setup_firstboot.sh` writes `/etc/pcrt/device.env`, reinstalls `reverse-tunnel.service`, and then runs `/opt/pcrt/scripts/services/install_services.sh` so systemd matches the selected bus configuration.
+During firstboot, `setup_firstboot.sh` writes `/etc/pcrt/device.env`, renders `/etc/pcrt/frpc.toml`, reinstalls `reverse-tunnel.service`, and then runs `/opt/pcrt/scripts/services/install_services.sh` so systemd matches the selected bus configuration.

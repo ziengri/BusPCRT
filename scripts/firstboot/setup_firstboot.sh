@@ -6,17 +6,15 @@ BASE_DIR="/opt/pcrt/scripts/firstboot"
 
 DEVICE_TEMPLATE="${BASE_DIR}/device.env"
 DEVICE_TARGET="/etc/pcrt/device.env"
+FRPC_TEMPLATE="${BASE_DIR}/frpc.toml"
+FRPC_TARGET="/etc/pcrt/frpc.toml"
 INSTALL_SERVICES_SCRIPT="${PROJECT_ROOT}/scripts/services/install_services.sh"
 
 REVERSE_TEMPLATE=""
 REVERSE_TARGET="/etc/systemd/system/reverse-tunnel.service"
 
-TUNNEL_KEY="/root/.ssh/id_ed25519_vps_tunnel"
-TUNNEL_REMOTE="tunnel@176.57.213.35"
-
 BUS_ID=""
 NUMBER_CAMS=""
-REVERSE_PORT=""
 HOSTNAME_VALUE=""
 
 log_info() {
@@ -93,39 +91,6 @@ escape_sed_replacement() {
   printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'
 }
 
-letter_to_num() {
-  local ch="${1,,}"
-  [[ "$ch" =~ ^[a-z]$ ]] || die "Invalid letter: $ch"
-
-  local ascii
-  printf -v ascii '%d' "'$ch"
-  echo $((ascii - 96))
-}
-
-calc_prefix_digit() {
-  local bus_id="$1"
-  local prefix="${bus_id:0:3}"
-  local sum=0
-  local i ch
-
-  for ((i=0; i<3; i++)); do
-    ch="${prefix:i:1}"
-    sum=$((sum + $(letter_to_num "$ch")))
-  done
-
-  echo $((sum % 10))
-}
-
-calc_reverse_port() {
-  local bus_id="$1"
-  local digit suffix
-
-  digit="$(calc_prefix_digit "$bus_id")"
-  suffix="${bus_id:3:3}"
-
-  echo "2${digit}${suffix}"
-}
-
 ask_bus_id() {
   local raw normalized
 
@@ -135,7 +100,6 @@ ask_bus_id() {
 
     if [[ "$normalized" =~ ^[a-z]{3}[0-9]{3}$ ]]; then
       BUS_ID="$normalized"
-      REVERSE_PORT="$(calc_reverse_port "$BUS_ID")"
       HOSTNAME_VALUE="bus-${BUS_ID}"
       return 0
     fi
@@ -163,8 +127,10 @@ confirm_apply() {
   echo
   echo "Bus ID      : ${BUS_ID}"
   echo "Number cams : ${NUMBER_CAMS}"
-  echo "Reverse port: ${REVERSE_PORT}"
   echo "Hostname    : ${HOSTNAME_VALUE}"
+  echo "Device env  : ${DEVICE_TARGET}"
+  echo "FRP config  : ${FRPC_TARGET}"
+  echo "Service     : ${REVERSE_TARGET}"
   echo
 
   local answer
@@ -202,8 +168,6 @@ render_device_env() {
 
   sed \
     -e "s/__BUS_ID__/$(escape_sed_replacement "$BUS_ID")/g" \
-    -e "s/__REVERSE_PORT__/$(escape_sed_replacement "$REVERSE_PORT")/g" \
-    -e "s/__HOSTNAME__/$(escape_sed_replacement "$HOSTNAME_VALUE")/g" \
     -e "s/__NUMBER_CAMS__/$(escape_sed_replacement "$NUMBER_CAMS")/g" \
     "$DEVICE_TEMPLATE" >"$tmp"
 
@@ -215,24 +179,29 @@ render_device_env() {
   log_info "Written: $DEVICE_TARGET"
 }
 
-install_reverse_tunnel_service() {
+render_frpc_config() {
   local tmp
   tmp="$(mktemp)"
 
+  sed \
+    -e "s/__BUS_ID__/$(escape_sed_replacement "$BUS_ID")/g" \
+    "$FRPC_TEMPLATE" >"$tmp"
+
+  mkdir -p "$(dirname "$FRPC_TARGET")"
+  backup_file "$FRPC_TARGET"
+  install -m 0644 "$tmp" "$FRPC_TARGET"
+  rm -f "$tmp"
+
+  log_info "Written: $FRPC_TARGET"
+}
+
+install_reverse_tunnel_service() {
   log_info "Stopping existing reverse-tunnel.service if present"
   systemctl stop reverse-tunnel.service >/dev/null 2>&1 || true
   systemctl disable reverse-tunnel.service >/dev/null 2>&1 || true
 
   backup_file "$REVERSE_TARGET"
-
-  sed \
-    -e "s/__BUS_ID__/$(escape_sed_replacement "$BUS_ID")/g" \
-    -e "s/__REVERSE_PORT__/$(escape_sed_replacement "$REVERSE_PORT")/g" \
-    -e "s/__HOSTNAME__/$(escape_sed_replacement "$HOSTNAME_VALUE")/g" \
-    "$REVERSE_TEMPLATE" >"$tmp"
-
-  install -m 0644 "$tmp" "$REVERSE_TARGET"
-  rm -f "$tmp"
+  install -m 0644 "$REVERSE_TEMPLATE" "$REVERSE_TARGET"
 
   log_info "Reloading systemd"
   systemctl daemon-reload
@@ -280,10 +249,10 @@ main() {
   require_cmd ssh-keygen
 
   require_file "$DEVICE_TEMPLATE"
+  require_file "$FRPC_TEMPLATE"
   resolve_reverse_template
   require_file "$REVERSE_TEMPLATE"
   require_file "$INSTALL_SERVICES_SCRIPT"
-  [[ -f "$TUNNEL_KEY" ]] || die "Tunnel SSH key not found: $TUNNEL_KEY"
 
   ask_bus_id
   ask_number_cams
@@ -293,6 +262,7 @@ main() {
   regenerate_unique_system_data
   update_hostname
   render_device_env
+  render_frpc_config
   install_reverse_tunnel_service
   install_buspcrt_services
 
@@ -300,9 +270,9 @@ main() {
   log_info "Done."
   echo "BUS_ID=${BUS_ID}"
   echo "NUMBER_CAMS=${NUMBER_CAMS}"
-  echo "REVERSE_PORT=${REVERSE_PORT}"
   echo "HOSTNAME=${HOSTNAME_VALUE}"
   echo "DEVICE_ENV=${DEVICE_TARGET}"
+  echo "FRPC_CONFIG=${FRPC_TARGET}"
   echo "SERVICE=${REVERSE_TARGET}"
   echo "PROJECT_ROOT=${PROJECT_ROOT}"
   echo "BUSPCRT_SERVICES=reinstalled"
