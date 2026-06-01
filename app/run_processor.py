@@ -88,7 +88,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default=None)
     parser.add_argument("--sessions-dir", default="sessions")
     parser.add_argument("--zmq-ipc-endpoint", dest="zmq_ipc_endpoint", default="ipc:///run/doors.sock")
-    parser.add_argument("--timeline-url", default="http://5.129.252.183:8000/api/v1/timeline")
+    parser.add_argument("--timeline-url", default="http://72.56.239.131:8000/api/v1/timeline")
     parser.add_argument("--timeline-outbox-db", dest="timeline_outbox_db", default=None)
     parser.add_argument("--bus-id", dest="bus_id", default="BUS320")
     parser.add_argument("--api-x-auth", dest="api_x_auth", default=None)
