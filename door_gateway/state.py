@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .protocol import configured_door_ids
+from .protocol import DoorTelemetry, configured_door_ids
 
 
 @dataclass
 class Snapshot:
     seq: int
     ts: float
-    doors: dict[int, int]
+    doors: dict[int, DoorTelemetry]
     any_open: bool
     all_closed: bool
     stale: bool
@@ -18,15 +18,17 @@ class Snapshot:
 class DoorStateStore:
     def __init__(self, door_count: int = 3) -> None:
         self.door_ids = configured_door_ids(door_count)
-        self.last_doors_state: dict[int, int] = {door_id: 0 for door_id in self.door_ids}
+        self.last_doors_state: dict[int, DoorTelemetry] = {
+            door_id: DoorTelemetry(state=0, voltage=0.0) for door_id in self.door_ids
+        }
         self.last_packet_ts: float | None = None
         self.seq: int = 0
         self.stale: bool = True
 
     @staticmethod
-    def _flags(doors: dict[int, int]) -> tuple[bool, bool]:
-        any_open = any(v == 1 for v in doors.values())
-        all_closed = all(v == 0 for v in doors.values())
+    def _flags(doors: dict[int, DoorTelemetry]) -> tuple[bool, bool]:
+        any_open = any(item.state == 1 for item in doors.values())
+        all_closed = all(item.state == 0 for item in doors.values())
         return any_open, all_closed
 
     def snapshot(self, ts: float) -> Snapshot:
@@ -40,8 +42,14 @@ class DoorStateStore:
             stale=self.stale,
         )
 
-    def update_from_doors(self, doors: dict[int, int], ts: float) -> Snapshot:
-        self.last_doors_state = {door_id: int(doors[door_id]) for door_id in self.door_ids}
+    def update_from_doors(self, doors: dict[int, DoorTelemetry], ts: float) -> Snapshot:
+        self.last_doors_state = {
+            door_id: DoorTelemetry(
+                state=int(doors[door_id].state),
+                voltage=float(doors[door_id].voltage),
+            )
+            for door_id in self.door_ids
+        }
         self.last_packet_ts = ts
         self.stale = False
         self.seq += 1

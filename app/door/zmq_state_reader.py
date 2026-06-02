@@ -65,7 +65,7 @@ class ProcessorDoorStateReader(_BaseZmqReader):
     """
     Consumes `doors.state` and returns True when processor must pause.
 
-    Pause conditions: any_open == True OR stale == True.
+    Pause condition: all_closed == False.
     """
 
     def __init__(self, endpoint: str):
@@ -81,7 +81,6 @@ class ProcessorDoorStateReader(_BaseZmqReader):
             topic, data = self._split_message(msg)
             if topic != self.topic or data is None:
                 continue
-            stale = bool(data.get("stale", True))
             all_closed = bool(data.get("all_closed", False))
-            self._pause_processing = stale or (not all_closed)
+            self._pause_processing = not all_closed
         return self._pause_processing

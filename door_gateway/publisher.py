@@ -52,7 +52,13 @@ class DoorPublisher:
         doors_payload = {
             "seq": seq,
             "ts": ts,
-            "doors": {str(door_id): snap.doors[door_id] for door_id in self.door_ids},
+            "doors": {
+                str(door_id): {
+                    "state": snap.doors[door_id].state,
+                    "voltage": snap.doors[door_id].voltage,
+                }
+                for door_id in self.door_ids
+            },
             "any_open": snap.any_open,
             "all_closed": snap.all_closed,
             "stale": snap.stale,
@@ -66,7 +72,8 @@ class DoorPublisher:
                     "seq": seq,
                     "ts": ts,
                     "door_id": door_id,
-                    "state": snap.doors[door_id],
+                    "state": snap.doors[door_id].state,
+                    "voltage": snap.doors[door_id].voltage,
                     "stale": snap.stale,
                 },
             )

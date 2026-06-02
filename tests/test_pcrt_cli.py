@@ -221,6 +221,55 @@ def test_run_doors_live_stops_and_restores_service(monkeypatch, tmp_path: Path) 
     assert "4" in commands[0]
 
 
+def test_run_doors_direct_stops_and_restores_service(monkeypatch, tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    script = runtime.project_root / "scripts" / "test_rs232_direct.py"
+    _write(script, "print('ok')\n")
+    actions = []
+    commands = []
+
+    monkeypatch.setattr(ctl, "_was_active", lambda unit: True)
+    monkeypatch.setattr(ctl, "_require_root", lambda action: None)
+    monkeypatch.setattr(ctl, "run_systemctl_action", lambda action, units: actions.append((action, tuple(units))))
+    monkeypatch.setattr(
+        ctl.subprocess,
+        "run",
+        lambda cmd, *args, **kwargs: commands.append(cmd) or SimpleNamespace(returncode=0),
+    )
+
+    exit_code = ctl.run_doors_direct(runtime)
+
+    assert exit_code == 0
+    assert actions == [
+        ("stop", ("buspcrt-door-gateway.service",)),
+        ("start", ("buspcrt-door-gateway.service",)),
+    ]
+    assert "--env-file" in commands[0]
+    assert str(runtime.door_gateway_env_path) in commands[0]
+    assert "--device-env-file" in commands[0]
+    assert str(runtime.device_env_path) in commands[0]
+
+
+def test_run_doors_direct_supports_serial_port_override(monkeypatch, tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    script = runtime.project_root / "scripts" / "test_rs232_direct.py"
+    _write(script, "print('ok')\n")
+    commands = []
+
+    monkeypatch.setattr(ctl, "_was_active", lambda unit: False)
+    monkeypatch.setattr(
+        ctl.subprocess,
+        "run",
+        lambda cmd, *args, **kwargs: commands.append(cmd) or SimpleNamespace(returncode=0),
+    )
+
+    exit_code = ctl.run_doors_direct(runtime, serial_port_override="/dev/ttyS1")
+
+    assert exit_code == 0
+    assert "--serial-port" in commands[0]
+    assert "/dev/ttyS1" in commands[0]
+
+
 def test_run_record_stops_and_restores_matching_recorder(monkeypatch, tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     _write(runtime.project_root / "recorder-cam4.env", "SOURCE=rtsp://cam4\nCAMERA_ID=cam4\nDOOR_CHANNEL=4\nFPS=25\n")
@@ -288,3 +337,20 @@ def test_main_help_command_for_specific_topic() -> None:
 
     assert exit_code == 0
     assert "Manual camera recording" in stdout.getvalue()
+
+
+def test_main_doors_direct_dispatches(monkeypatch, tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    calls = []
+
+    monkeypatch.setattr(ctl, "load_runtime_config", lambda args: runtime)
+    monkeypatch.setattr(
+        ctl,
+        "run_doors_direct",
+        lambda runtime, serial_port_override=None: calls.append((runtime, serial_port_override)) or 0,
+    )
+
+    exit_code = ctl.main(["doors", "direct", "--serial-port", "/dev/ttyS1"])
+
+    assert exit_code == 0
+    assert calls == [(runtime, "/dev/ttyS1")]

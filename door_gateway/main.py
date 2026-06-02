@@ -7,7 +7,7 @@ import time
 import serial
 
 from .config import GatewayConfig, parse_gateway_args
-from .protocol import parse_packet
+from .protocol import DoorTelemetry, parse_packet
 from .publisher import DoorPublisher
 from .serial_reader import extract_packets
 from .state import DoorStateStore
@@ -29,6 +29,13 @@ def _packet_hex(packet: bytes) -> str:
     return " ".join(f"{b:02X}" for b in packet)
 
 
+def _doors_repr(doors: dict[int, DoorTelemetry]) -> str:
+    return ", ".join(
+        f"{door_id}:state={item.state} voltage={item.voltage:g}V"
+        for door_id, item in sorted(doors.items())
+    )
+
+
 def _open_serial(cfg: GatewayConfig, port: str) -> serial.Serial:
     return serial.Serial(
         port=port,
@@ -45,7 +52,7 @@ def _probe_port_for_protocol(
     *,
     door_count: int,
     probe_timeout_sec: float = 1.5,
-) -> tuple[bool, dict[int, int] | None]:
+) -> tuple[bool, dict[int, DoorTelemetry] | None]:
     buffer = bytearray()
     deadline = time.time() + probe_timeout_sec
     while time.time() < deadline:
@@ -63,7 +70,10 @@ def _probe_port_for_protocol(
     return False, None
 
 
-def _select_serial_port(cfg: GatewayConfig, logger: logging.Logger) -> tuple[serial.Serial, str, dict[int, int] | None] | None:
+def _select_serial_port(
+    cfg: GatewayConfig,
+    logger: logging.Logger,
+) -> tuple[serial.Serial, str, dict[int, DoorTelemetry] | None] | None:
     if cfg.serial_port:
         try:
             ser = _open_serial(cfg, cfg.serial_port)
@@ -153,6 +163,7 @@ def main() -> int:
             ts = time.time()
             snap = store.update_from_doors(probe_doors, ts)
             publisher.publish_snapshot(snap)
+            logger.debug("Probe packet doors={%s}", _doors_repr(probe_doors))
             last_heartbeat_ts = ts
             if stale_logged:
                 logger.info("Door state recovered from stale")
@@ -193,7 +204,7 @@ def main() -> int:
                     ts = time.time()
                     snap = store.update_from_doors(doors, ts)
                     publisher.publish_snapshot(snap)
-                    logger.debug("Valid packet hex=%s doors=%s", _packet_hex(packet), doors)
+                    logger.debug("Valid packet hex=%s doors={%s}", _packet_hex(packet), _doors_repr(doors))
                     last_heartbeat_ts = ts
                     if stale_logged:
                         logger.info("Door state recovered from stale")

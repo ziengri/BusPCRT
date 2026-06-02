@@ -215,6 +215,12 @@ def build_parser() -> tuple[argparse.ArgumentParser, dict[str, argparse.Argument
         description="Run interactive door simulator",
     )
     doors_live.add_argument("--endpoint", default=None)
+    doors_direct = doors_sub.add_parser(
+        "direct",
+        help="Read raw RS-232 door packets directly",
+        description="Read raw RS-232 door packets directly",
+    )
+    doors_direct.add_argument("--serial-port", default=None)
     command_parsers["doors"] = doors
 
     record = subparsers.add_parser(
@@ -751,6 +757,31 @@ def run_doors_live(runtime: RuntimeConfig, endpoint_override: str | None = None)
         return proc.returncode
 
 
+def run_doors_direct(runtime: RuntimeConfig, serial_port_override: str | None = None) -> int:
+    script = runtime.project_root / "scripts" / "test_rs232_direct.py"
+    if not script.exists():
+        raise CtlError(f"Door direct reader not found: {script}")
+
+    cmd = [
+        sys.executable,
+        str(script),
+        "--env-file",
+        str(runtime.door_gateway_env_path),
+        "--device-env-file",
+        str(runtime.device_env_path),
+    ]
+    if serial_port_override:
+        cmd.extend(["--serial-port", serial_port_override])
+
+    with maybe_stopped_unit(FIXED_SERVICE_TARGETS["door"], action_label="doors direct"):
+        proc = subprocess.run(
+            cmd,
+            cwd=runtime.project_root,
+            check=False,
+        )
+        return proc.returncode
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser, command_parsers = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
@@ -801,6 +832,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "doors":
             if args.doors_command == "live":
                 return run_doors_live(runtime, endpoint_override=args.endpoint)
+            if args.doors_command == "direct":
+                return run_doors_direct(runtime, serial_port_override=args.serial_port)
 
         if args.command == "record":
             payload = run_record(runtime, args.camera, args.duration, args.output_dir)

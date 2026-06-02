@@ -12,12 +12,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from door_gateway.protocol import build_packet, configured_door_ids
+from door_gateway.protocol import DoorTelemetry, build_packet, configured_door_ids
 from door_gateway.publisher import DoorPublisher
 from door_gateway.state import DoorStateStore
 
+OPEN_VOLTAGE = 12.4
+CLOSED_VOLTAGE = 0.0
 
-def _build_raw_packet(doors: dict[int, int], *, door_count: int) -> bytes:
+
+def _build_raw_packet(doors: dict[int, DoorTelemetry], *, door_count: int) -> bytes:
     return build_packet(doors, door_count=door_count)
 
 
@@ -60,7 +63,10 @@ def main() -> int:
     door_ids = configured_door_ids(args.door_count)
     publisher = DoorPublisher(args.endpoint, door_ids=door_ids)
     store = DoorStateStore(args.door_count)
-    store.update_from_doors({door_id: 0 for door_id in door_ids}, time.time())
+    store.update_from_doors(
+        {door_id: DoorTelemetry(state=0, voltage=CLOSED_VOLTAGE) for door_id in door_ids},
+        time.time(),
+    )
 
     stop_event = threading.Event()
 
@@ -79,12 +85,26 @@ def main() -> int:
 
     def _toggle(door_id: int) -> None:
         doors = dict(store.last_doors_state)
-        doors[door_id] = 0 if doors[door_id] == 1 else 1
+        current = doors[door_id]
+        next_state = 0 if current.state == 1 else 1
+        doors[door_id] = DoorTelemetry(
+            state=next_state,
+            voltage=OPEN_VOLTAGE if next_state == 1 else CLOSED_VOLTAGE,
+        )
         store.update_from_doors(doors, time.time())
         _publish(store, publisher, door_count=args.door_count)
 
     def _set_all(state: int) -> None:
-        store.update_from_doors({door_id: state for door_id in door_ids}, time.time())
+        store.update_from_doors(
+            {
+                door_id: DoorTelemetry(
+                    state=state,
+                    voltage=OPEN_VOLTAGE if state == 1 else CLOSED_VOLTAGE,
+                )
+                for door_id in door_ids
+            },
+            time.time(),
+        )
         _publish(store, publisher, door_count=args.door_count)
 
     try:

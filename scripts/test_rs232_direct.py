@@ -59,6 +59,13 @@ def _hex(data: bytes) -> str:
     return " ".join(f"{b:02X}" for b in data)
 
 
+def _doors_repr(doors: dict[int, object]) -> str:
+    return ", ".join(
+        f"door={door_id} state=\\x{getattr(item, 'state'):02x} voltage={getattr(item, 'voltage'):g}V"
+        for door_id, item in sorted(doors.items())
+    )
+
+
 def main() -> int:
     args = parse_args()
     buffer = bytearray()
@@ -90,7 +97,7 @@ def main() -> int:
                     for packet in packets:
                         try:
                             doors = parse_packet(packet, door_count=args.door_count)
-                            print(f"VALID hex={_hex(packet)} doors={doors}")
+                            print(f"VALID hex={_hex(packet)} doors={_doors_repr(doors)}")
                         except ValueError as exc:
                             print(f"INVALID hex={_hex(packet)} err={exc}")
             except KeyboardInterrupt:
