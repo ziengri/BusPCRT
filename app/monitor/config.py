@@ -10,7 +10,7 @@ from app.shared import camera_numeric_id, discover_recorder_configs, parse_numbe
 
 from .models import CameraTarget
 
-DEFAULT_API_BASE_URL = "http://72.56.239.131:8000"
+DEFAULT_API_BASE_URL = "http://api.gortransportnch.ru:8000"
 DEFAULT_API_X_AUTH = "pcrt!af3g"
 DEFAULT_FIXED_MONITOR_UNITS = (
     "buspcrt-processor.service",
