@@ -24,7 +24,7 @@ def configured_door_ids(door_count: int = 3) -> tuple[int, ...]:
 
 
 def packet_size_bytes(door_count: int = 3) -> int:
-    # One door entry is always "<id>=<state>,<voltage_ascii>;" => 6 bytes.
+    # One door entry is always "<id>=<state>,<voltage_byte>;" => 6 bytes.
     return len(HEADER) + (6 * validate_door_count(door_count))
 
 
@@ -36,12 +36,12 @@ def build_packet(doors: Mapping[int, DoorTelemetry], *, door_count: int = 3) -> 
         if state not in (0, 1):
             raise ValueError(f"Invalid door state bytes: door={door_id} state={state}")
         voltage = int(telemetry.voltage)
-        if voltage < 0 or voltage > 9:
+        if voltage < 0 or voltage > 255:
             raise ValueError(f"Invalid door voltage byte: door={door_id} voltage={voltage}")
         packet.extend(f"{door_id}=".encode("ascii"))
         packet.append(state)
         packet.append(ord(","))
-        packet.extend(str(voltage).encode("ascii"))
+        packet.append(voltage)
         packet.append(ord(";"))
     built = bytes(packet)
     expected_size = packet_size_bytes(door_count)
@@ -51,7 +51,7 @@ def build_packet(doors: Mapping[int, DoorTelemetry], *, door_count: int = 3) -> 
 
 
 def parse_packet(packet: bytes, *, door_count: int = 3) -> dict[int, DoorTelemetry]:
-    """Parse one fixed-size packet like b'!DOORS:1=\x00,0;2=\x01,9;3=\x00,1;'."""
+    """Parse one fixed-size packet like b'!DOORS:1=\x01,\x80;2=\x01,\xAF;3=\x00,\x93;'."""
     expected_ids = set(configured_door_ids(door_count))
     expected_size = packet_size_bytes(door_count)
     if len(packet) != expected_size:
@@ -94,12 +94,7 @@ def parse_packet(packet: bytes, *, door_count: int = 3) -> dict[int, DoorTelemet
         if payload[1] != ord(","):
             raise ValueError(f"Missing voltage separator: door={door_id}")
 
-        voltage_raw = payload[2:3]
-
-        try:
-            voltage = int(voltage_raw.decode("ascii"))
-        except (UnicodeDecodeError, ValueError) as exc:
-            raise ValueError(f"Invalid voltage value: door={door_id} raw={voltage_raw!r}") from exc
+        voltage = payload[2]
 
         parsed[door_id] = DoorTelemetry(state=state, voltage=voltage)
 
