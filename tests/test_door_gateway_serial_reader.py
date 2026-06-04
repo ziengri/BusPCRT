@@ -7,9 +7,9 @@ from door_gateway.serial_reader import extract_packets
 def test_extract_packets_partial_chunks() -> None:
     packet = build_packet(
         {
-            1: DoorTelemetry(state=0, voltage=0.0),
-            2: DoorTelemetry(state=1, voltage=12.4),
-            3: DoorTelemetry(state=0, voltage=0.1),
+            1: DoorTelemetry(state=0, voltage=0),
+            2: DoorTelemetry(state=1, voltage=9),
+            3: DoorTelemetry(state=0, voltage=1),
         }
     )
     buffer = bytearray(packet[:10])
@@ -27,9 +27,9 @@ def test_extract_packets_partial_chunks() -> None:
 def test_extract_packets_with_garbage_prefix() -> None:
     packet = build_packet(
         {
-            1: DoorTelemetry(state=0, voltage=0.0),
-            2: DoorTelemetry(state=0, voltage=0.0),
-            3: DoorTelemetry(state=0, voltage=0.0),
+            1: DoorTelemetry(state=0, voltage=0),
+            2: DoorTelemetry(state=0, voltage=0),
+            3: DoorTelemetry(state=0, voltage=0),
         }
     )
     buffer = bytearray(b"\xAA\xBBgarbage" + packet)
@@ -40,16 +40,16 @@ def test_extract_packets_with_garbage_prefix() -> None:
 def test_extract_packets_multiple_and_tail() -> None:
     p1 = build_packet(
         {
-            1: DoorTelemetry(state=0, voltage=0.0),
-            2: DoorTelemetry(state=0, voltage=0.0),
-            3: DoorTelemetry(state=0, voltage=0.0),
+            1: DoorTelemetry(state=0, voltage=0),
+            2: DoorTelemetry(state=0, voltage=0),
+            3: DoorTelemetry(state=0, voltage=0),
         }
     )
     p2 = build_packet(
         {
-            1: DoorTelemetry(state=1, voltage=12.2),
-            2: DoorTelemetry(state=1, voltage=12.3),
-            3: DoorTelemetry(state=0, voltage=0.1),
+            1: DoorTelemetry(state=1, voltage=9),
+            2: DoorTelemetry(state=1, voltage=8),
+            3: DoorTelemetry(state=0, voltage=1),
         }
     )
     buffer = bytearray(p1 + p2 + b"!DO")
@@ -61,10 +61,10 @@ def test_extract_packets_multiple_and_tail() -> None:
 def test_extract_packets_for_four_doors() -> None:
     packet = build_packet(
         {
-            1: DoorTelemetry(state=0, voltage=0.0),
-            2: DoorTelemetry(state=1, voltage=12.4),
-            3: DoorTelemetry(state=0, voltage=0.1),
-            4: DoorTelemetry(state=1, voltage=11.9),
+            1: DoorTelemetry(state=0, voltage=0),
+            2: DoorTelemetry(state=1, voltage=9),
+            3: DoorTelemetry(state=0, voltage=1),
+            4: DoorTelemetry(state=1, voltage=8),
         },
         door_count=4,
     )
@@ -76,8 +76,8 @@ def test_extract_packets_for_four_doors() -> None:
     assert buffer == bytearray(b"!DO")
 
 
-def test_extract_packets_waits_for_full_semicolon_count() -> None:
-    packet = b"!DOORS:1=\x00,0.0;2=\x01,12.4;"
+def test_extract_packets_waits_for_full_packet_size() -> None:
+    packet = b"!DOORS:1=\x00,0;2=\x01,9;"
     buffer = bytearray(packet)
 
     packets = extract_packets(buffer, door_count=3)
@@ -89,12 +89,12 @@ def test_extract_packets_waits_for_full_semicolon_count() -> None:
 def test_extract_packets_resyncs_to_next_header_after_truncated_packet() -> None:
     valid = build_packet(
         {
-            1: DoorTelemetry(state=0, voltage=0.0),
-            2: DoorTelemetry(state=1, voltage=12.4),
-            3: DoorTelemetry(state=0, voltage=0.1),
+            1: DoorTelemetry(state=0, voltage=0),
+            2: DoorTelemetry(state=1, voltage=9),
+            3: DoorTelemetry(state=0, voltage=1),
         }
     )
-    truncated = b"!DOORS:1=\x00,0.0;2=\x01,12.4"
+    truncated = b"!DOORS:1=\x00,0;2=\x01,9"
     buffer = bytearray(truncated + valid)
 
     packets = extract_packets(buffer, door_count=3)

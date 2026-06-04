@@ -61,7 +61,7 @@ def _hex(data: bytes) -> str:
 
 def _doors_repr(doors: dict[int, object]) -> str:
     return ", ".join(
-        f"door={door_id} state=\\x{getattr(item, 'state'):02x} voltage={getattr(item, 'voltage'):g}V"
+        f"door={door_id} state=\\x{getattr(item, 'state'):02x} voltage={int(getattr(item, 'voltage'))}V"
         for door_id, item in sorted(doors.items())
     )
 

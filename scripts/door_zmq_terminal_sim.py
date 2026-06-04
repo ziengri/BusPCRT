@@ -16,8 +16,8 @@ from door_gateway.protocol import DoorTelemetry, build_packet, configured_door_i
 from door_gateway.publisher import DoorPublisher
 from door_gateway.state import DoorStateStore
 
-OPEN_VOLTAGE = 12.4
-CLOSED_VOLTAGE = 0.0
+OPEN_VOLTAGE = 9
+CLOSED_VOLTAGE = 0
 
 
 def _build_raw_packet(doors: dict[int, DoorTelemetry], *, door_count: int) -> bytes:

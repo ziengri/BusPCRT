@@ -31,7 +31,7 @@ def _packet_hex(packet: bytes) -> str:
 
 def _doors_repr(doors: dict[int, DoorTelemetry]) -> str:
     return ", ".join(
-        f"{door_id}:state={item.state} voltage={item.voltage:g}V"
+        f"{door_id}:state={item.state} voltage={item.voltage}V"
         for door_id, item in sorted(doors.items())
     )
 

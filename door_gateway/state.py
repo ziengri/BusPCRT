@@ -19,7 +19,7 @@ class DoorStateStore:
     def __init__(self, door_count: int = 3) -> None:
         self.door_ids = configured_door_ids(door_count)
         self.last_doors_state: dict[int, DoorTelemetry] = {
-            door_id: DoorTelemetry(state=0, voltage=0.0) for door_id in self.door_ids
+            door_id: DoorTelemetry(state=0, voltage=0) for door_id in self.door_ids
         }
         self.last_packet_ts: float | None = None
         self.seq: int = 0
@@ -46,7 +46,7 @@ class DoorStateStore:
         self.last_doors_state = {
             door_id: DoorTelemetry(
                 state=int(doors[door_id].state),
-                voltage=float(doors[door_id].voltage),
+                voltage=int(doors[door_id].voltage),
             )
             for door_id in self.door_ids
         }

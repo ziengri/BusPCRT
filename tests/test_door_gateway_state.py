@@ -8,22 +8,22 @@ def test_state_flags_and_snapshot() -> None:
     store = DoorStateStore()
     snap = store.update_from_doors(
         {
-            1: DoorTelemetry(state=0, voltage=0.0),
-            2: DoorTelemetry(state=1, voltage=12.4),
-            3: DoorTelemetry(state=0, voltage=0.1),
+            1: DoorTelemetry(state=0, voltage=0),
+            2: DoorTelemetry(state=1, voltage=9),
+            3: DoorTelemetry(state=0, voltage=1),
         },
         ts=100.0,
     )
     assert snap.any_open is True
     assert snap.all_closed is False
     assert snap.stale is False
-    assert snap.doors[2].voltage == 12.4
+    assert snap.doors[2].voltage == 9
 
     snap2 = store.update_from_doors(
         {
-            1: DoorTelemetry(state=0, voltage=0.0),
-            2: DoorTelemetry(state=0, voltage=0.0),
-            3: DoorTelemetry(state=0, voltage=0.1),
+            1: DoorTelemetry(state=0, voltage=0),
+            2: DoorTelemetry(state=0, voltage=0),
+            3: DoorTelemetry(state=0, voltage=1),
         },
         ts=101.0,
     )
@@ -36,9 +36,9 @@ def test_stale_transition_and_recovery() -> None:
     store = DoorStateStore()
     store.update_from_doors(
         {
-            1: DoorTelemetry(state=0, voltage=0.0),
-            2: DoorTelemetry(state=0, voltage=0.0),
-            3: DoorTelemetry(state=0, voltage=0.0),
+            1: DoorTelemetry(state=0, voltage=0),
+            2: DoorTelemetry(state=0, voltage=0),
+            3: DoorTelemetry(state=0, voltage=0),
         },
         ts=10.0,
     )
@@ -48,9 +48,9 @@ def test_stale_transition_and_recovery() -> None:
 
     snap = store.update_from_doors(
         {
-            1: DoorTelemetry(state=1, voltage=11.7),
-            2: DoorTelemetry(state=0, voltage=0.0),
-            3: DoorTelemetry(state=0, voltage=0.0),
+            1: DoorTelemetry(state=1, voltage=9),
+            2: DoorTelemetry(state=0, voltage=0),
+            3: DoorTelemetry(state=0, voltage=0),
         },
         ts=13.0,
     )
@@ -62,15 +62,15 @@ def test_state_supports_four_doors() -> None:
 
     snap = store.update_from_doors(
         {
-            1: DoorTelemetry(state=0, voltage=0.0),
-            2: DoorTelemetry(state=0, voltage=0.0),
-            3: DoorTelemetry(state=0, voltage=0.0),
-            4: DoorTelemetry(state=1, voltage=11.9),
+            1: DoorTelemetry(state=0, voltage=0),
+            2: DoorTelemetry(state=0, voltage=0),
+            3: DoorTelemetry(state=0, voltage=0),
+            4: DoorTelemetry(state=1, voltage=8),
         },
         ts=42.0,
     )
 
     assert snap.doors[4].state == 1
-    assert snap.doors[4].voltage == 11.9
+    assert snap.doors[4].voltage == 8
     assert snap.any_open is True
     assert snap.all_closed is False
