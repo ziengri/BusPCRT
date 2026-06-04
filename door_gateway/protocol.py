@@ -24,8 +24,8 @@ def configured_door_ids(door_count: int = 3) -> tuple[int, ...]:
 
 
 def packet_size_bytes(door_count: int = 3) -> int:
-    # One door entry is always "<id>=<state>,<voltage_byte>;" => 6 bytes.
-    return len(HEADER) + (6 * validate_door_count(door_count))
+    # One door entry is always "<id>=<state>,<voltage_hi><voltage_lo>;" => 7 bytes.
+    return len(HEADER) + (7 * validate_door_count(door_count))
 
 
 def build_packet(doors: Mapping[int, DoorTelemetry], *, door_count: int = 3) -> bytes:
@@ -36,12 +36,12 @@ def build_packet(doors: Mapping[int, DoorTelemetry], *, door_count: int = 3) -> 
         if state not in (0, 1):
             raise ValueError(f"Invalid door state bytes: door={door_id} state={state}")
         voltage = int(telemetry.voltage)
-        if voltage < 0 or voltage > 255:
+        if voltage < 0 or voltage > 65535:
             raise ValueError(f"Invalid door voltage byte: door={door_id} voltage={voltage}")
         packet.extend(f"{door_id}=".encode("ascii"))
         packet.append(state)
         packet.append(ord(","))
-        packet.append(voltage)
+        packet.extend(voltage.to_bytes(2, byteorder="big", signed=False))
         packet.append(ord(";"))
     built = bytes(packet)
     expected_size = packet_size_bytes(door_count)
@@ -51,7 +51,7 @@ def build_packet(doors: Mapping[int, DoorTelemetry], *, door_count: int = 3) -> 
 
 
 def parse_packet(packet: bytes, *, door_count: int = 3) -> dict[int, DoorTelemetry]:
-    """Parse one fixed-size packet like b'!DOORS:1=\x01,\x80;2=\x01,\xAF;3=\x00,\x93;'."""
+    """Parse one fixed-size packet like b'!DOORS:1=\\x01,\\x02\\x80;2=\\x01,\\x03\\xAF;3=\\x00,\\x01\\x93;'."""
     expected_ids = set(configured_door_ids(door_count))
     expected_size = packet_size_bytes(door_count)
     if len(packet) != expected_size:
@@ -85,7 +85,7 @@ def parse_packet(packet: bytes, *, door_count: int = 3) -> dict[int, DoorTelemet
             raise ValueError(f"Unexpected door id: {door_id}")
         if door_id in parsed:
             raise ValueError(f"Duplicate door id: {door_id}")
-        if len(payload) != 3:
+        if len(payload) != 4:
             raise ValueError(f"Invalid packet payload: door={door_id}")
 
         state = payload[0]
@@ -94,7 +94,7 @@ def parse_packet(packet: bytes, *, door_count: int = 3) -> dict[int, DoorTelemet
         if payload[1] != ord(","):
             raise ValueError(f"Missing voltage separator: door={door_id}")
 
-        voltage = payload[2]
+        voltage = int.from_bytes(payload[2:4], byteorder="big", signed=False)
 
         parsed[door_id] = DoorTelemetry(state=state, voltage=voltage)
 
