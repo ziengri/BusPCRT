@@ -1,6 +1,16 @@
 from __future__ import annotations
 
-from .protocol import HEADER, packet_size_bytes, validate_door_count
+from .protocol import HEADER, validate_door_count
+
+
+def _find_packet_end(buffer: bytearray, *, door_count: int) -> int | None:
+    semicolon_count = 0
+    for index in range(len(HEADER), len(buffer)):
+        if buffer[index] == ord(";"):
+            semicolon_count += 1
+            if semicolon_count == door_count:
+                return index + 1
+    return None
 
 
 def extract_packets(buffer: bytearray, *, door_count: int = 3) -> list[bytes]:
@@ -12,7 +22,6 @@ def extract_packets(buffer: bytearray, *, door_count: int = 3) -> list[bytes]:
     validate_door_count(door_count)
     packets: list[bytes] = []
     header_len = len(HEADER)
-    packet_len = packet_size_bytes(door_count)
 
     while True:
         idx = buffer.find(HEADER)
@@ -24,15 +33,16 @@ def extract_packets(buffer: bytearray, *, door_count: int = 3) -> list[bytes]:
         if idx > 0:
             del buffer[:idx]
 
-        next_header_idx = buffer.find(HEADER, 1)
-        if 0 < next_header_idx < packet_len:
+        next_header_idx = buffer.find(HEADER, header_len)
+        packet_end = _find_packet_end(buffer, door_count=door_count)
+        if next_header_idx >= 0 and (packet_end is None or next_header_idx < packet_end):
             del buffer[:next_header_idx]
             continue
-        if len(buffer) < packet_len:
+        if packet_end is None:
             break
 
-        packet = bytes(buffer[:packet_len])
-        del buffer[:packet_len]
+        packet = bytes(buffer[:packet_end])
+        del buffer[:packet_end]
         packets.append(packet)
 
     return packets

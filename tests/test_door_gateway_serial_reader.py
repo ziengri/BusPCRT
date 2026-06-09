@@ -76,6 +76,26 @@ def test_extract_packets_for_four_doors() -> None:
     assert buffer == bytearray(b"!DO")
 
 
+def test_extract_packets_with_single_byte_voltage() -> None:
+    packet = b"!DOORS:1=\x01,\x80;2=\x00,\x09;3=\x01,\xFF;"
+    buffer = bytearray(packet + b"!DO")
+
+    packets = extract_packets(buffer, door_count=3)
+
+    assert packets == [packet]
+    assert buffer == bytearray(b"!DO")
+
+
+def test_extract_packets_with_mixed_voltage_width() -> None:
+    packet = b"!DOORS:1=\x01,\x80;2=\x01,\x03\xAF;3=\x00,\x09;"
+    buffer = bytearray(packet)
+
+    packets = extract_packets(buffer, door_count=3)
+
+    assert packets == [packet]
+    assert buffer == bytearray()
+
+
 def test_extract_packets_waits_for_full_packet_size() -> None:
     packet = b"!DOORS:1=\x00,\x02\x80;2=\x01,\x03\xAF;"
     buffer = bytearray(packet)
