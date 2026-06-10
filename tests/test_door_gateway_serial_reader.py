@@ -7,9 +7,9 @@ from door_gateway.serial_reader import extract_packets
 def test_extract_packets_partial_chunks() -> None:
     packet = build_packet(
         {
-            1: DoorTelemetry(state=0, voltage=0x0280),
-            2: DoorTelemetry(state=1, voltage=0x03AF),
-            3: DoorTelemetry(state=0, voltage=0x0193),
+            1: DoorTelemetry(state=0, voltage=0x80),
+            2: DoorTelemetry(state=1, voltage=0xAF),
+            3: DoorTelemetry(state=0, voltage=0x93),
         }
     )
     buffer = bytearray(packet[:10])
@@ -27,9 +27,9 @@ def test_extract_packets_partial_chunks() -> None:
 def test_extract_packets_with_garbage_prefix() -> None:
     packet = build_packet(
         {
-            1: DoorTelemetry(state=0, voltage=0x0010),
-            2: DoorTelemetry(state=0, voltage=0x0020),
-            3: DoorTelemetry(state=0, voltage=0x0030),
+            1: DoorTelemetry(state=0, voltage=0x10),
+            2: DoorTelemetry(state=0, voltage=0x20),
+            3: DoorTelemetry(state=0, voltage=0x30),
         }
     )
     buffer = bytearray(b"\xAA\xBBgarbage" + packet)
@@ -40,16 +40,16 @@ def test_extract_packets_with_garbage_prefix() -> None:
 def test_extract_packets_multiple_and_tail() -> None:
     p1 = build_packet(
         {
-            1: DoorTelemetry(state=0, voltage=0x0010),
-            2: DoorTelemetry(state=0, voltage=0x0020),
-            3: DoorTelemetry(state=0, voltage=0x0030),
+            1: DoorTelemetry(state=0, voltage=0x10),
+            2: DoorTelemetry(state=0, voltage=0x20),
+            3: DoorTelemetry(state=0, voltage=0x30),
         }
     )
     p2 = build_packet(
         {
-            1: DoorTelemetry(state=1, voltage=0x10AA),
-            2: DoorTelemetry(state=1, voltage=0x20BB),
-            3: DoorTelemetry(state=0, voltage=0x30CC),
+            1: DoorTelemetry(state=1, voltage=0xAA),
+            2: DoorTelemetry(state=1, voltage=0xBB),
+            3: DoorTelemetry(state=0, voltage=0xCC),
         }
     )
     buffer = bytearray(p1 + p2 + b"!DO")
@@ -61,10 +61,10 @@ def test_extract_packets_multiple_and_tail() -> None:
 def test_extract_packets_for_four_doors() -> None:
     packet = build_packet(
         {
-            1: DoorTelemetry(state=0, voltage=0x0010),
-            2: DoorTelemetry(state=1, voltage=0x12F0),
-            3: DoorTelemetry(state=0, voltage=0x0001),
-            4: DoorTelemetry(state=1, voltage=0x0A7E),
+            1: DoorTelemetry(state=0, voltage=0x10),
+            2: DoorTelemetry(state=1, voltage=0xF0),
+            3: DoorTelemetry(state=0, voltage=0x01),
+            4: DoorTelemetry(state=1, voltage=0x7E),
         },
         door_count=4,
     )
@@ -85,19 +85,8 @@ def test_extract_packets_with_single_byte_voltage() -> None:
     assert packets == [packet]
     assert buffer == bytearray(b"!DO")
 
-
-def test_extract_packets_with_mixed_voltage_width() -> None:
-    packet = b"!DOORS:1=\x01,\x80;2=\x01,\x03\xAF;3=\x00,\x09;"
-    buffer = bytearray(packet)
-
-    packets = extract_packets(buffer, door_count=3)
-
-    assert packets == [packet]
-    assert buffer == bytearray()
-
-
-def test_extract_packets_waits_for_full_packet_size() -> None:
-    packet = b"!DOORS:1=\x00,\x02\x80;2=\x01,\x03\xAF;"
+def test_extract_packets_waits_for_full_door_count() -> None:
+    packet = b"!DOORS:1=\x00,\x80;2=\x01,\xAF;"
     buffer = bytearray(packet)
 
     packets = extract_packets(buffer, door_count=3)
@@ -109,12 +98,12 @@ def test_extract_packets_waits_for_full_packet_size() -> None:
 def test_extract_packets_resyncs_to_next_header_after_truncated_packet() -> None:
     valid = build_packet(
         {
-            1: DoorTelemetry(state=0, voltage=0x0280),
-            2: DoorTelemetry(state=1, voltage=0x03AF),
-            3: DoorTelemetry(state=0, voltage=0x0193),
+            1: DoorTelemetry(state=0, voltage=0x80),
+            2: DoorTelemetry(state=1, voltage=0xAF),
+            3: DoorTelemetry(state=0, voltage=0x93),
         }
     )
-    truncated = b"!DOORS:1=\x00,\x02\x80;2=\x01,\x03\xAF"
+    truncated = b"!DOORS:1=\x00,\x80;2=\x01,\xAF"
     buffer = bytearray(truncated + valid)
 
     packets = extract_packets(buffer, door_count=3)

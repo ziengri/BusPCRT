@@ -16,7 +16,7 @@ from door_gateway.protocol import DoorTelemetry, build_packet, configured_door_i
 from door_gateway.publisher import DoorPublisher
 from door_gateway.state import DoorStateStore
 
-OPEN_VOLTAGE = 0x03AF
+OPEN_VOLTAGE = 0xAF
 CLOSED_VOLTAGE = 0
 
 

@@ -173,15 +173,14 @@ This temporarily stops `buspcrt-door-gateway.service` if it is active, starts th
 The simulator uses the current `ZMQ_IPC_ENDPOINT` from `config.env` by default.
 The door count comes from `/etc/pcrt/device.env::NUMBER_CAMS`. `door_gateway.env::DOOR_COUNT` is only an optional manual override for debugging.
 
-Door packets now use mixed binary/ASCII RS-232 payloads:
+Door packets now use binary door-state + binary voltage RS-232 payloads:
 
 ```text
-!DOORS:1=\x00,0.0;2=\x01,12.4;3=\x00,0.1;
+!DOORS:1=\x00,\x80;2=\x01,\xAF;3=\x00,\x93;
 ```
 
 Where each door entry is `<door_id>=<state_byte>,<voltage>;`.
-`state_byte` remains binary `\x00` or `\x01`, and `voltage` is sent as ASCII decimal volts.
-`door_gateway` publishes this data to `doors.state` and `door.N.state`; recorder and processor still use only the door state, while voltage is available for local diagnostics and remote troubleshooting.
+`state_byte` remains binary `\x00` or `\x01`, and `voltage` is sent as one raw hex byte from the device. `door_gateway` converts that byte to a decimal integer in `doors.state` and `door.N.state`; recorder and processor still use only the door state, while voltage is available for local diagnostics and remote troubleshooting.
 
 ### Direct RS-232 Door Reader
 
