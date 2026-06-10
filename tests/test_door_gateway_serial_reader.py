@@ -85,6 +85,17 @@ def test_extract_packets_with_single_byte_voltage() -> None:
     assert packets == [packet]
     assert buffer == bytearray(b"!DO")
 
+
+def test_extract_packets_without_final_semicolon() -> None:
+    packet = b"!DOORS:1=\x00,\x00;2=\x00,\x00;3=\x00,\x1F"
+    buffer = bytearray(packet + b"!DO")
+
+    packets = extract_packets(buffer, door_count=3)
+
+    assert packets == [packet]
+    assert buffer == bytearray(b"!DO")
+
+
 def test_extract_packets_waits_for_full_door_count() -> None:
     packet = b"!DOORS:1=\x00,\x80;2=\x01,\xAF;"
     buffer = bytearray(packet)

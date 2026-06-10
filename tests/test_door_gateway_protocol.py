@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from door_gateway.protocol import DoorTelemetry, build_packet, packet_size_bytes, parse_packet
+from door_gateway.protocol import DoorTelemetry, build_packet, packet_min_size_bytes, packet_size_bytes, parse_packet
 
 
 def test_parse_valid_packet() -> None:
@@ -29,6 +29,17 @@ def test_parse_valid_packet_with_single_byte_voltage() -> None:
         1: DoorTelemetry(state=1, voltage=0x80),
         2: DoorTelemetry(state=0, voltage=0x09),
         3: DoorTelemetry(state=1, voltage=0xFF),
+    }
+
+
+def test_parse_valid_packet_without_final_semicolon() -> None:
+    packet = b"!DOORS:1=\x00,\x00;2=\x00,\x00;3=\x00,\x1F"
+
+    assert len(packet) == packet_min_size_bytes(3) == 24
+    assert parse_packet(packet) == {
+        1: DoorTelemetry(state=0, voltage=0x00),
+        2: DoorTelemetry(state=0, voltage=0x00),
+        3: DoorTelemetry(state=0, voltage=0x1F),
     }
 
 
@@ -94,4 +105,13 @@ def test_parse_known_frame_from_device_example() -> None:
         1: DoorTelemetry(state=1, voltage=0x80),
         2: DoorTelemetry(state=1, voltage=0xAF),
         3: DoorTelemetry(state=0, voltage=0x93),
+    }
+
+
+def test_parse_known_frame_without_final_semicolon() -> None:
+    packet = bytes.fromhex("21 44 4F 4F 52 53 3A 31 3D 00 2C 00 3B 32 3D 00 2C 00 3B 33 3D 00 2C 1F")
+    assert parse_packet(packet) == {
+        1: DoorTelemetry(state=0, voltage=0x00),
+        2: DoorTelemetry(state=0, voltage=0x00),
+        3: DoorTelemetry(state=0, voltage=0x1F),
     }

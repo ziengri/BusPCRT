@@ -28,6 +28,10 @@ def packet_size_bytes(door_count: int = 3) -> int:
     return len(HEADER) + (6 * validate_door_count(door_count))
 
 
+def packet_min_size_bytes(door_count: int = 3) -> int:
+    return packet_size_bytes(door_count) - 1
+
+
 def build_packet(doors: Mapping[int, DoorTelemetry], *, door_count: int = 3) -> bytes:
     packet = bytearray(HEADER)
     for door_id in configured_door_ids(door_count):
@@ -51,18 +55,17 @@ def build_packet(doors: Mapping[int, DoorTelemetry], *, door_count: int = 3) -> 
 
 
 def parse_packet(packet: bytes, *, door_count: int = 3) -> dict[int, DoorTelemetry]:
-    """Parse one packet like b'!DOORS:1=\\x01,\\x80;2=\\x01,\\xAF;3=\\x00,\\x93;'."""
+    """Parse one packet like b'!DOORS:1=\\x01,\\x80;2=\\x01,\\xAF;3=\\x00,\\x93[;]'."""
     expected_ids = set(configured_door_ids(door_count))
     if packet[: len(HEADER)] != HEADER:
         raise ValueError("Invalid packet prefix")
-    if not packet.endswith(b";"):
-        raise ValueError("Packet must end with ';'")
+    if len(packet) not in (packet_min_size_bytes(door_count), packet_size_bytes(door_count)):
+        raise ValueError(f"Invalid packet size: {len(packet)}")
 
     body = packet[len(HEADER) :]
     raw_entries = body.split(b";")
-    if raw_entries[-1] != b"":
-        raise ValueError("Invalid packet termination")
-    entries = raw_entries[:-1]
+    has_final_semicolon = raw_entries[-1] == b""
+    entries = raw_entries[:-1] if has_final_semicolon else raw_entries
     if len(entries) != len(expected_ids):
         raise ValueError(f"Invalid door entry count: {len(entries)}")
 

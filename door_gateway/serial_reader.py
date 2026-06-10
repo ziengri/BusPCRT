@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from .protocol import HEADER, validate_door_count
+from .protocol import HEADER, packet_min_size_bytes, packet_size_bytes, validate_door_count
 
 
 def _find_packet_end(buffer: bytearray, *, door_count: int) -> int | None:
-    semicolon_count = 0
-    for index in range(len(HEADER), len(buffer)):
-        if buffer[index] == ord(";"):
-            semicolon_count += 1
-            if semicolon_count == door_count:
-                return index + 1
-    return None
+    min_size = packet_min_size_bytes(door_count)
+    max_size = packet_size_bytes(door_count)
+    if len(buffer) < min_size:
+        return None
+    if len(buffer) >= max_size and buffer[max_size - 1] == ord(";"):
+        return max_size
+    return min_size
 
 
 def extract_packets(buffer: bytearray, *, door_count: int = 3) -> list[bytes]:
