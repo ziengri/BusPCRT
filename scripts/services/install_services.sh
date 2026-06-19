@@ -89,6 +89,7 @@ uninstall_fixed_services() {
   "$(service_script processor_service.sh)" uninstall
   "$(service_script door_gateway_service.sh)" uninstall
   "$(service_script updater_service.sh)" uninstall
+  "$(service_script modem_watchdog_service.sh)" uninstall
   "$(service_script sessions_cleanup_service.sh)" uninstall
   "$(service_script pcrt_cli.sh)" uninstall
 }
@@ -140,6 +141,7 @@ install_fixed_services() {
   "$(service_script processor_service.sh)" install --project-root "$PROJECT_ROOT" --env "$PROJECT_ROOT/processor.env" --python "$PYTHON_BIN"
   "$(service_script monitor_service.sh)" install --project-root "$PROJECT_ROOT" --env "$PROJECT_ROOT/monitor.env" --python "$PYTHON_BIN"
   "$(service_script updater_service.sh)" install --project-root "$PROJECT_ROOT" --env "$PROJECT_ROOT/config.env"
+  "$(service_script modem_watchdog_service.sh)" install --project-root "$PROJECT_ROOT" --env "$PROJECT_ROOT/modem-watchdog.env"
 }
 
 install_recorder_services() {
@@ -183,6 +185,7 @@ main() {
   require_file "$PROJECT_ROOT/door_gateway.env"
   require_file "$PROJECT_ROOT/processor.env"
   require_file "$PROJECT_ROOT/monitor.env"
+  require_file "$PROJECT_ROOT/modem-watchdog.env"
   require_executable "$PYTHON_BIN"
   require_executable "$(service_script sessions_cleanup_service.sh)"
   require_executable "$(service_script pcrt_cli.sh)"
@@ -190,6 +193,7 @@ main() {
   require_executable "$(service_script processor_service.sh)"
   require_executable "$(service_script monitor_service.sh)"
   require_executable "$(service_script updater_service.sh)"
+  require_executable "$(service_script modem_watchdog_service.sh)"
   require_executable "$(service_script recorder_service.sh)"
 
   log_info "Reinstalling BusPCRT services from $PROJECT_ROOT"
