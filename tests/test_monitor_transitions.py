@@ -89,3 +89,19 @@ def test_internet_transition_emits_single_event(tmp_path: Path) -> None:
     assert len(second) == 1
     assert second[0].kind == "internet.status_changed"
     assert third == []
+
+
+def test_recorder_service_transition_does_not_emit_unhealthy_event(tmp_path: Path) -> None:
+    service = MonitorService(_config(tmp_path), outbox=MonitorOutbox(tmp_path / "monitor.sqlite"), api_client=_ClientStub())
+
+    first = service._service_transition_events(
+        [{"name": "buspcrt-recorder@cam1.service", "monitorState": "ok"}],
+        occurred_at="2026-01-01T10:00:00Z",
+    )
+    second = service._service_transition_events(
+        [{"name": "buspcrt-recorder@cam1.service", "monitorState": "error", "status": "failed"}],
+        occurred_at="2026-01-01T10:01:00Z",
+    )
+
+    assert first == []
+    assert second == []

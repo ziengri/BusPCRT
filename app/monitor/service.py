@@ -42,6 +42,10 @@ class MonitorService:
     def _state_key(*parts: str) -> str:
         return ":".join(parts)
 
+    @staticmethod
+    def _is_recorder_unit(unit_name: str) -> bool:
+        return unit_name.startswith("buspcrt-recorder@") and unit_name.endswith(".service")
+
     def _get_bool_state(self, key: str) -> bool | None:
         value = self.outbox.get_state(key)
         if value is None:
@@ -219,6 +223,9 @@ class MonitorService:
             key = self._state_key("service", name, "monitor_state")
             previous = self.outbox.get_state(key)
             if previous is not None and previous != current:
+                if self._is_recorder_unit(name):
+                    self.outbox.set_state(key, current)
+                    continue
                 is_error = current != "ok"
                 message = (
                     f"Service {name} is unhealthy"
